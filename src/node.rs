@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::{fnv_hash, Trie};
+use crate::{fnv_hash, Trie, PreHashedMap};
 
 #[derive(Debug, Clone)]
 pub struct NodeEdge {
@@ -56,48 +56,44 @@ where
             }
         }
     }
-
+    /// Depth first iteration of a node and its children.
     pub(crate) fn iter<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> {
         NodeIter {
             map: &trie.children,
-            current: Some(self),
+            current: self,
             next: None,
             all_kids: Vec::new(),
-            first: true,
         }
     }
 }
 
 pub(crate) struct NodeIter<'a, T> {
-    map: &'a HashMap<u64, Node<T>>,
-    current: Option<&'a Node<T>>,
+    map: &'a PreHashedMap<u64, Node<T>>,
+    current: &'a Node<T>,
     next: Option<&'a Node<T>>,
     all_kids: Vec<u64>,
-    first: bool,
 }
 impl<'a, T> Iterator for NodeIter<'a, T> {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(curr) = self.current {
-            if self.next.is_none() {
-                self.all_kids.extend(curr.children.iter().cloned());
-                let key = curr.children.first().unwrap();
-                let next = self.map.get(key);
-                self.next = next;
-                return self.current;
-            }
-            
-            if !curr.children.is_empty() {
-                self.current = self.next;
-                self.all_kids.extend(curr.children.iter().cloned());
-                let key = curr.children.first().unwrap();
-                self.next = self.map.get(key);
-                self.current
-            } else {
-                None
-            }
+        if self.next.is_none() {
+            self.all_kids.extend(self.current.children.iter().cloned());
+
+            let key = self.all_kids.remove(0);
+            let next = self.map.get(&key);
+            self.next = next;
+            return self.next;
         } else {
-            None
+            // next is always Some
+            self.current = self.next.unwrap();
+            // all kids will be empty for the end case
+            self.all_kids.extend(self.current.children.iter().cloned());
+
+            if self.all_kids.is_empty() { return None };
+
+            let key = self.all_kids.remove(0);
+            self.next = self.map.get(&key);
+            self.next
         }
     }
 }

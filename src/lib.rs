@@ -20,11 +20,12 @@
 //! IDEA TWO
 //! HashMap key of hashed (&[T], T) where [T] is the previous elements of the sequence and T is the current
 //! element of &[T]. The value stared are nodes that have hashmap indexes to child nodes?
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use fnv::FnvHasher;
 
+mod noop_hash;
+pub use noop_hash::PreHashedMap;
 mod node;
 use node::{Node};
 
@@ -39,12 +40,12 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Trie<T> {
-    children: HashMap<u64, Node<T>>
+    children: PreHashedMap<u64, Node<T>>
 }
 impl<T> Default for Trie<T> {
     fn default() -> Self {
         Self {
-            children: HashMap::new(),
+            children: PreHashedMap::default(),
         }
     }
 }
@@ -54,12 +55,13 @@ where
     T: Eq + Hash + Clone,
 {
     pub fn new() -> Self {
-        Trie { children: HashMap::new(), }
+        Trie { children: PreHashedMap::default(), }
     }
 
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
             let key = fnv_hash((&seq[..idx], &val));
+            // let key = (&seq[..idx], &val);
 
             if self.children.contains_key(&key) {
                 // add new keys to Node.children vec
@@ -86,6 +88,7 @@ where
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             let key = fnv_hash((seq, first));
+            // let key = (seq, first);
             if self.children.contains_key(&key) {
 
             }
@@ -96,7 +99,7 @@ where
     pub fn find(&self, seq_key: &[T]) -> Vec<T> {
         let i = seq_key.len() - 1;
         let key = fnv_hash((&seq_key[..i], &seq_key[i]));
-
+        // let key = (&seq_key[..i], &seq_key[i]);
         let mut res = Vec::new();
         if let Some(node) = self.children.get(&key) {
             res.push(node.val.clone());
@@ -138,7 +141,7 @@ mod tests {
     fn it_works() {
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
-        // trie.insert(&['c', 'o', 'w']);
+        trie.insert(&['c', 'o', 'w']);
         let found = trie.find(&['c']);
         println!("{:?}", found);
     }
