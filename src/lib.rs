@@ -90,7 +90,7 @@ where
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             let key = fnv_hash((&[], first));
-            self.starts.push(key);
+            if !self.starts.contains(&key) { self.starts.push(key) };
             self._insert(seq, Some(first.clone()), 0)
         }
     }
@@ -114,8 +114,9 @@ where
             trie: self,
             current: None,
             starts: &self.starts,
-            children: &[],
+            children: Vec::default(),
             idx: 0,
+            next_idx: 0,
         }
     }
 }
@@ -124,26 +125,40 @@ pub struct TrieIter<'a, T> {
     trie: &'a Trie<T>,
     current: Option<&'a Node<T>>,
     starts: &'a [u64],
-    children: &'a [u64],
+    children: Vec<u64>,
     idx: usize,
+    next_idx: usize,
 }
-impl<'a, T> Iterator for TrieIter<'a, T> {
+impl<'a, T> Iterator for TrieIter<'a, T> 
+where
+    T: Clone + Eq + Hash,
+{
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.is_none() {
-            if let Some(key) = self.starts.get(self.idx) {
-                if let Some(curr) = self.trie.children.get(&key) {
-                    self.current = Some(curr);
-                    self.children = &curr.children;
-                    self.current
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
+            // this bails us out of the iteration
+            let key = self.starts.get(self.idx)?;
+            self.current = Some(self.trie.children.get(&key)?);
+            self.idx += 1;
+            // we know its there
+            self.children = self.current.unwrap()
+                .walk(self.trie)
+                .map(|n| n.key)
+                .collect::<Vec<_>>();
 
+            self.current
+        } else {
+            let key = self.children[self.next_idx];
+            self.current = self.trie.children.get(&key);
+            self.next_idx += 1;
+
+            if self.next_idx >= self.children.len() {
+                self.next_idx = 0;
+                let curr = self.current.take();
+                curr
+            } else {
+                self.current
+            }
         }
     }
 }
@@ -207,5 +222,15 @@ mod tests {
         trie.insert(&['c', 'o', 'w']);
         let found = trie.find(&['c']);
         println!("{:?}", found);
+    }
+
+    #[test]
+    fn trie_iter() {
+        let mut trie = Trie::new();
+        trie.insert(&['c', 'a', 't']);
+        trie.insert(&['c', 'o', 'w']);
+        for n in trie.iter() {
+            println!("{:?}", n);
+        }
     }
 }

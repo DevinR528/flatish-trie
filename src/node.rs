@@ -5,6 +5,7 @@ use crate::{fnv_hash, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
+    pub(crate) key: u64,
     pub(crate) val: T,
     pub(crate) children: Vec<u64>,
     pub(crate) child_size: usize,
@@ -22,14 +23,14 @@ where
     T: Eq + Hash + Clone,
 {
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
+        let key = fnv_hash((&seq[..idx], &seq[idx]));
         let i = idx + 1;
         let mut children = Vec::new();
-
         if let Some(ele) = seq.get(i) {
             children.push(fnv_hash((&seq[..i], ele)));
         }
-
         Self {
+            key,
             val,
             children,
             child_size: 0,
@@ -67,6 +68,7 @@ pub(crate) struct NodeIter<'a, T> {
 impl<'a, T> Iterator for NodeIter<'a, T> {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
+        // return first child
         if self.next.is_none() {
             self.all_kids.extend(self.current.children.iter().cloned());
 
@@ -74,6 +76,7 @@ impl<'a, T> Iterator for NodeIter<'a, T> {
             let next = self.map.get(&key);
             self.next = next;
             self.next
+        // iterate depth first through children
         } else {
             // next is always Some
             self.current = self.next.unwrap();
