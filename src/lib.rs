@@ -40,12 +40,14 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Trie<T> {
+    starts: Vec<u64>,
     children: PreHashedMap<u64, Node<T>>
 }
 impl<T> Default for Trie<T> {
     fn default() -> Self {
         Self {
             children: PreHashedMap::default(),
+            starts: Vec::default(),
         }
     }
 }
@@ -55,7 +57,7 @@ where
     T: Eq + Hash + Clone,
 {
     pub fn new() -> Self {
-        Trie { children: PreHashedMap::default(), }
+        Trie { children: PreHashedMap::default(), starts: Vec::default(), }
     }
 
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
@@ -87,11 +89,8 @@ where
 
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
-            let key = fnv_hash((seq, first));
-            // let key = (seq, first);
-            if self.children.contains_key(&key) {
-
-            }
+            let key = fnv_hash((&[], first));
+            self.starts.push(key);
             self._insert(seq, Some(first.clone()), 0)
         }
     }
@@ -103,33 +102,97 @@ where
         let mut res = Vec::new();
         if let Some(node) = self.children.get(&key) {
             res.push(node.val.clone());
-            for n in node.iter(self) {
+            for n in node.walk(self) {
                 res.push(n.val.clone());
             }
         }
         res
     }
 
-    // pub fn iter(&self) -> TrieIter<T> {
-    //     TrieIter {
-    //         trie: self,
-    //         current: self.children,
-    //         children: self.children,
-    //         idx: 0,
-    //     }
-    // }
+    pub fn iter(&self) -> TrieIter<T> {
+        TrieIter {
+            trie: self,
+            current: None,
+            starts: &self.starts,
+            children: &[],
+            idx: 0,
+        }
+    }
 }
 
-// pub struct TrieIter<'a, T> {
-//     trie: &'a Trie<T>,
-//     current: Option<&'a Node<T>>,
-//     children: Vec<u64>,
-//     idx: u64,
-// }
-// impl<'a, T> Iterator for TrieIter<'a, T> {
-//     type Item = &'a Node<T>;
-//     fn next(&mut self) -> Option<Self::Item> {
+pub struct TrieIter<'a, T> {
+    trie: &'a Trie<T>,
+    current: Option<&'a Node<T>>,
+    starts: &'a [u64],
+    children: &'a [u64],
+    idx: usize,
+}
+impl<'a, T> Iterator for TrieIter<'a, T> {
+    type Item = &'a Node<T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current.is_none() {
+            if let Some(key) = self.starts.get(self.idx) {
+                if let Some(curr) = self.trie.children.get(&key) {
+                    self.current = Some(curr);
+                    self.children = &curr.children;
+                    self.current
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
 
+        }
+    }
+}
+
+// #[derive(Debug, Clone)]
+// pub struct Found<T> {
+//     roll_back: Vec<usize>,
+//     temp: Vec<T>,
+//     collected: Vec<Vec<T>>,
+// }
+
+// impl<T: Clone + PartialEq> Found<T> {
+//     fn new() -> Self {
+//         Self {
+//             roll_back: vec![],
+//             temp: vec![],
+//             collected: vec![],
+//         }
+//     }
+
+//     pub fn as_collected(&self) -> Vec<&[T]> {
+//         self.collected
+//             .iter()
+//             .map(|seq| seq.as_slice())
+//             .collect::<Vec<_>>()
+//     }
+
+//     fn push_val(&mut self, t: T) {
+//         self.temp.push(t);
+//     }
+
+//     fn branch_end_continue(&mut self) {
+//         self.collected.push(self.temp.clone());
+//     }
+
+//     fn branch_split(&mut self, key: &T)
+//     where
+//         T: std::fmt::Debug,
+//     {
+//         if let Some(idx) = self.temp.iter().position(|item| key == item) {
+//             let (start, end) = self.temp.split_at(idx + 1);
+//             self.temp = start.to_vec();
+//         }
+//     }
+
+//     fn branch_end(&mut self) {
+//         self.collected.push(self.temp.clone());
+//         // remove last element
+//         self.temp.pop();
 //     }
 // }
 
@@ -138,7 +201,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn insert_find() {
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'o', 'w']);

@@ -1,24 +1,14 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 
 use crate::{fnv_hash, Trie, PreHashedMap};
 
-#[derive(Debug, Clone)]
-pub struct NodeEdge {
-    val_idx: usize,
-    node_idx: usize,
-}
-
-impl NodeEdge {
-
-}
-
 #[derive(Debug, Clone, Eq)]
-pub(crate) struct Node<T> {
+pub struct Node<T> {
     pub(crate) val: T,
-    children: Vec<u64>,
-    child_size: usize,
-    terminal: bool,
+    pub(crate) children: Vec<u64>,
+    pub(crate) child_size: usize,
+    pub(crate) terminal: bool,
 }
 
 impl<T: PartialEq> PartialEq for Node<T> {
@@ -57,7 +47,7 @@ where
         }
     }
     /// Depth first iteration of a node and its children.
-    pub(crate) fn iter<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> {
+    pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> {
         NodeIter {
             map: &trie.children,
             current: self,
@@ -71,6 +61,7 @@ pub(crate) struct NodeIter<'a, T> {
     map: &'a PreHashedMap<u64, Node<T>>,
     current: &'a Node<T>,
     next: Option<&'a Node<T>>,
+    // TODO how much worse is VecDeque
     all_kids: Vec<u64>,
 }
 impl<'a, T> Iterator for NodeIter<'a, T> {
@@ -82,12 +73,12 @@ impl<'a, T> Iterator for NodeIter<'a, T> {
             let key = self.all_kids.remove(0);
             let next = self.map.get(&key);
             self.next = next;
-            return self.next;
+            self.next
         } else {
             // next is always Some
             self.current = self.next.unwrap();
             // all kids will be empty for the end case
-            self.all_kids.extend(self.current.children.iter().cloned());
+            self.all_kids.splice(0..0, self.current.children.iter().rev().copied());
 
             if self.all_kids.is_empty() { return None };
 
