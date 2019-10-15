@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+// use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 
 use crate::{fnv_hash, Trie, PreHashedMap};
@@ -38,11 +38,32 @@ where
         }
     }
 
+    pub(crate) fn as_value(&self) -> &T {
+        &self.val
+    }
+
+    pub(crate) fn to_value(&self) -> T {
+        self.val.clone()
+    }
+
+    pub(crate) fn is_terminal(&self) -> bool {
+        self.terminal
+    }
+
+    pub(crate) fn child_len(&self) -> usize {
+        self.children.len()
+    }
+
+    pub(crate) fn children<'a, 'b: 'a>(&'b self, map: &'b PreHashedMap<u64, Node<T>>) -> Vec<&Node<T>> {
+        self.children.iter().map(|key| map.get(key).unwrap()).collect()
+    }
+
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if let Some(ele) = seq.get(i) {
             let key = fnv_hash((&seq[..i], ele));
             if !self.children.contains(&key) {
+                self.child_size += 1;
                 self.children.push(key);
             }
         }
@@ -62,7 +83,7 @@ pub(crate) struct NodeIter<'a, T> {
     map: &'a PreHashedMap<u64, Node<T>>,
     current: &'a Node<T>,
     next: Option<&'a Node<T>>,
-    // TODO how much worse is VecDeque
+    // TODO try using VecDeque
     all_kids: Vec<u64>,
 }
 impl<'a, T> Iterator for NodeIter<'a, T> {
