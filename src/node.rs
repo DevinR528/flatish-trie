@@ -1,6 +1,6 @@
 // use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
-
+use std::fmt::Debug;
 use crate::{fnv_hash, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
@@ -20,7 +20,7 @@ impl<T: PartialEq> PartialEq for Node<T> {
 
 impl<T> Node<T> 
 where
-    T: Eq + Hash + Clone,
+    T: Eq + Hash + Clone + Debug,
 {
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
         let key = fnv_hash((&seq[..idx], &seq[idx]));

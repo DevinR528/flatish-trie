@@ -57,7 +57,7 @@ impl<T> Default for Trie<T> {
 
 impl<T> Trie<T> 
 where
-    T: Eq + Hash + Clone,
+    T: Eq + Hash + Clone + Debug,
 {
     pub fn new() -> Self {
         Trie { children: PreHashedMap::default(), starts: Vec::default(), }
@@ -78,11 +78,13 @@ where
                     self._insert(seq, Some(next.clone()), idx);
                     return;
                 }
+                return;
             }
 
             let terminal = seq.len() == idx + 1;
             let node = Node::new(val, &seq, idx, terminal);
             self.children.insert(key, node);
+            // if terminal { return };
             idx += 1;
             if let Some(next) = seq.get(idx) {
                 self._insert(seq, Some(next.clone()), idx)
@@ -96,6 +98,42 @@ where
             if !self.starts.contains(&key) { self.starts.push(key) };
             self._insert(seq, Some(first.clone()), 0)
         }
+    }
+
+    fn _search<'n>(
+        map: &PreHashedMap<u64, Node<T>>,
+        node: &'n Node<T>,
+        seq_key: &[T],
+        idx: usize,
+        found: &mut Found<T>
+    ) {        
+        // complete terminal branch no children
+        if node.is_terminal() && node.child_len() == 0 {
+            found.branch_end();
+            return;
+        // terminal but children after
+        } else if node.is_terminal() {
+            found.branch_end_continue();
+        }
+        // recurs iteratively over children
+        for n in node.children(map) {
+            found.push_val(n.to_value());
+            Trie::_search(map, n, seq_key, idx + 1, found);
+
+            // not terminal but has more than one child, if deeper than single
+            // node we need a some way of keeping track of what needs to be removed
+            // from temp vec
+            if !node.is_terminal() && node.child_len() > 1 {
+                found.branch_split(node.as_value());
+            }
+        }
+    }
+
+    pub fn contains(&self, seq_key: &[T]) -> bool {
+        let i = seq_key.len() - 1;
+        let key = fnv_hash((&seq_key[..i], &seq_key[i]));
+
+        self.children.contains_key(&key)
     }
 
     /// Returns all of the found sequences, walking
@@ -119,51 +157,13 @@ where
     pub fn search(&self, seq_key: &[T]) -> Found<T> {
         let i = seq_key.len() - 1;
         let key = fnv_hash((&seq_key[..i], &seq_key[i]));
-        // let key = (&seq_key[..i], &seq_key[i]);
+
         let mut res = Found::new();
+        res.extend(seq_key.iter().cloned());
         if let Some(node) = self.children.get(&key) {
-            res.push_val(node.val.clone());
             Trie::_search(&self.children, node, seq_key, 1, &mut res)
         }
         res
-    }
-
-    fn _search<'n>(
-        map: &PreHashedMap<u64, Node<T>>,
-        node: &'n Node<T>,
-        seq_key: &[T],
-        idx: usize,
-        found: &mut Found<T>
-    ) {        
-        if let Some(k) = seq_key.get(idx) {
-            let key = fnv_hash((&seq_key[0..idx], k));
-            if let Some(n) = map.get(&key) {
-                found.push_val(n.to_value());
-                // found.branch_split(node.as_value());
-                Trie::_search(map, n, seq_key, idx + 1, found);
-            }
-        } else {
-            // complete terminal branch no children
-            if node.is_terminal() && node.child_len() == 0 {
-                found.branch_end();
-                return;
-            // terminal but children after
-            } else if node.is_terminal() {
-                found.branch_end_continue();
-            }
-            // recurs iteratively over children
-            for n in node.children(map) {
-                found.push_val(n.to_value());
-                Trie::_search(map, n, seq_key, idx + 1, found);
-
-                // not terminal but has more than one child, if deeper than single
-                // node we need a some way of keeping track of what needs to be removed
-                // from temp vec
-                if !node.is_terminal() && node.child_len() > 1 {
-                    found.branch_split(node.as_value());
-                }
-            }
-        }
     }
 
     pub fn iter(&self) -> TrieIter<T> {
@@ -200,6 +200,10 @@ impl<T: Clone + PartialEq> Found<T> {
             .collect::<Vec<_>>()
     }
 
+    fn extend<I: IntoIterator<Item = T>>(&mut self, i: I) {
+        self.temp.extend(i)
+    }
+
     fn push_val(&mut self, t: T) {
         self.temp.push(t);
     }
@@ -232,7 +236,7 @@ pub struct TrieIter<'a, T> {
 }
 impl<'a, T> Iterator for TrieIter<'a, T> 
 where
-    T: Clone + Eq + Hash,
+    T: Clone + Eq + Hash + Debug,
 {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -267,23 +271,73 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Read;
+
+    const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt"];
+
+    fn get_text(i: usize) -> Vec<String> {
+        let mut contents = String::new();
+        File::open(&DATA[i])
+            .unwrap()
+            .read_to_string(&mut contents)
+            .unwrap();
+        contents
+            .split_whitespace()
+            .map(|s| s.trim().to_string())
+            .collect()
+    }
+
+    fn make_trie(words: &[String]) -> Trie<char> {
+        let mut trie = Trie::new();
+        for w in words {
+            trie.insert(&w.chars().collect::<Vec<_>>());
+        }
+        trie
+    }
 
     #[test]
     fn insert_find() {
+        let cmp_found = vec![ vec!['c', 'a', 't'], vec!['c', 'a', 'r', 't'], vec!['c', 'o', 'w']];
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
+        trie.insert(&['c', 'a', 'r', 't']);
         trie.insert(&['c', 'o', 'w']);
         let found = trie.search(&['c']);
         println!("{:?}", found);
+        for (expected, found) in cmp_found.iter().zip(found.as_collected()) {
+            assert_eq!(&expected[..], found)
+        }
     }
 
     #[test]
     fn trie_iter() {
+        let ord = &['c', 'a', 't', 'o', 'w'];
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'o', 'w']);
-        for n in trie.iter() {
-            println!("{:?}", n);
+
+        for (i, n) in trie.iter().enumerate() {
+            assert_eq!(ord[i], n.val)
+        }
+    }
+
+    #[test]
+    fn test_on_data() {
+        // test sun rising
+        let text = get_text(1);
+        let trie = make_trie(&text);
+
+        for word in text.iter() {
+            assert!(trie.contains(&word.chars().collect::<Vec<_>>()));
+        }
+
+        // test 1984
+        let text = get_text(0);
+        let trie = make_trie(&text);
+
+        for word in text.iter() {
+            assert!(trie.contains(&word.chars().collect::<Vec<_>>()));
         }
     }
 }
