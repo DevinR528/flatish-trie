@@ -24,33 +24,30 @@
 //! <br>
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::collections::hash_map::Entry;
 
 use fnv::FnvHasher;
 
-mod noop_hash;
-pub use noop_hash::PreHashedMap;
+mod key;
+use key::{make_key, key_from_seq, key_at_index};
 mod node;
 use node::{Node};
-
-pub(crate) fn fnv_hash<T>(to_hash: (&[T], &T)) -> u64 
-where 
-    T: Hash,
-{
-    let mut hasher = FnvHasher::default();
-    to_hash.hash(&mut hasher);
-    hasher.finish()
-}
+mod noop_hash;
+pub use noop_hash::PreHashedMap;
 
 #[derive(Debug, Clone)]
 pub struct Trie<T> {
     starts: Vec<u64>,
-    children: PreHashedMap<u64, Node<T>>
+    children: PreHashedMap<u64, Node<T>>,
+    /// number of unique items T inserted into the trie.
+    len: usize,
 }
 impl<T> Default for Trie<T> {
     fn default() -> Self {
         Self {
             children: PreHashedMap::default(),
             starts: Vec::default(),
+            len: 0,
         }
     }
 }
@@ -60,13 +57,12 @@ where
     T: Eq + Hash + Clone + Debug,
 {
     pub fn new() -> Self {
-        Trie { children: PreHashedMap::default(), starts: Vec::default(), }
+        Trie { children: PreHashedMap::default(), starts: Vec::default(), len: 0, }
     }
 
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
-            let key = fnv_hash((&seq[..idx], &val));
-            // let key = (&seq[..idx], &val);
+            let key = make_key((&seq[..idx], &val));
 
             if self.children.contains_key(&key) {
                 // add new keys to Node.children vec
@@ -84,6 +80,7 @@ where
             let terminal = seq.len() == idx + 1;
             let node = Node::new(val, &seq, idx, terminal);
             self.children.insert(key, node);
+            self.len += 1;
             // if terminal { return };
             idx += 1;
             if let Some(next) = seq.get(idx) {
@@ -94,7 +91,7 @@ where
 
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
-            let key = fnv_hash((&[], first));
+            let key = make_key((&[], first));
             if !self.starts.contains(&key) { self.starts.push(key) };
             self._insert(seq, Some(first.clone()), 0)
         }
@@ -130,9 +127,7 @@ where
     }
 
     pub fn contains(&self, seq_key: &[T]) -> bool {
-        let i = seq_key.len() - 1;
-        let key = fnv_hash((&seq_key[..i], &seq_key[i]));
-
+        let key = key_from_seq(seq_key);
         self.children.contains_key(&key)
     }
 
@@ -155,8 +150,7 @@ where
     /// );
     /// ```
     pub fn search(&self, seq_key: &[T]) -> Found<T> {
-        let i = seq_key.len() - 1;
-        let key = fnv_hash((&seq_key[..i], &seq_key[i]));
+        let key = key_from_seq(seq_key);
 
         let mut res = Found::new();
         res.extend(seq_key.iter().cloned());
@@ -176,6 +170,57 @@ where
             next_idx: 0,
         }
     }
+    /// `key` is child key `entry` is parent node
+    fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
+        let node = entry
+            .and_modify(|n| {
+                n.remove_child(&key);
+            })
+            // TODO Hacky?? we can not insert ever we know all `keys` in `seq` are valid
+            // so if `or_insert_with` runs we have a bug
+            .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
+        println!("_REMOVE {:?}", node);
+        node.child_len() == 0
+    }
+
+    pub fn remove(&mut self, seq: &[T]) -> bool {
+        let mut map = std::collections::HashMap::new();
+        map.insert("s", 1);
+        map.entry("s").and_modify(|x| *x+=1);
+
+        if seq.iter().enumerate()
+            .all(|(i, _)| {
+                let key = key_at_index(i, seq);
+                self.children.contains_key(&key)
+            })
+        {
+            let mut i = seq.len() - 1;
+            let mut key = key_at_index(i, seq);
+
+            while i > 0 {
+
+                println!("{}--{:?}", key, self.children.get(&key_at_index(i - 1, seq)));
+
+                if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
+                    println!("{:?}", self.children.remove(&key));
+                } else {
+                    println!("PARTY");
+                }
+                println!("AFTER {}--{:?}", key, self.children.get(&key_at_index(i, seq)));
+                i -= 1;
+                key = key_at_index(i, seq);
+            }
+            true
+        } else {
+            false
+        }
+    }
+}
+
+struct Remove<'a, T> {
+    curr: &'a mut Node<T>,
+    parent: &'a mut Node<T>,
+    to_remove: Vec<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -313,10 +358,27 @@ mod tests {
     #[test]
     fn trie_iter() {
         let ord = &['c', 'a', 't', 'o', 'w'];
+
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'o', 'w']);
 
+        for (i, n) in trie.iter().enumerate() {
+            assert_eq!(ord[i], n.val)
+        }
+    }
+
+    #[test]
+    fn trie_remove() {
+        let ord = &['c', 'a', 't', 'o', 'w'];
+
+        let mut trie = Trie::new();
+        trie.insert(&['c', 'a', 't']);
+        trie.insert(&['c', 'a', 'r', 't']);
+        trie.insert(&['c', 'o', 'w']);
+
+        trie.remove(&['c', 'a', 'r', 't']);
+        println!("{:?}", trie);
         for (i, n) in trie.iter().enumerate() {
             assert_eq!(ord[i], n.val)
         }

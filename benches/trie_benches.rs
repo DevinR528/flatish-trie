@@ -42,16 +42,16 @@ fn trie_get(b: &mut Criterion) {
 }
 
 fn trie_insert_remove(b: &mut Criterion) {
-    // let words = get_text();
+    let words = get_text();
 
-    // b.bench_function("trie remove", |b| {
-    //     b.iter(|| {
-    //         let mut trie = make_trie(&words);
-    //         for w in &words {
-    //             trie.remove(&w.chars().collect::<Vec<_>>());
-    //         }
-    //     });
-    // });
+    b.bench_function("trie remove", |b| {
+        b.iter(|| {
+            let mut trie = make_trie(&words);
+            for w in &words {
+                trie.remove(&w.chars().collect::<Vec<_>>());
+            }
+        });
+    });
 }
 
 criterion_group!(benches, trie_insert, trie_get, trie_insert_remove);

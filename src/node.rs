@@ -1,7 +1,7 @@
 // use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::fmt::Debug;
-use crate::{fnv_hash, Trie, PreHashedMap};
+use crate::{make_key, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
@@ -23,11 +23,11 @@ where
     T: Eq + Hash + Clone + Debug,
 {
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
-        let key = fnv_hash((&seq[..idx], &seq[idx]));
+        let key = make_key((&seq[..idx], &seq[idx]));
         let i = idx + 1;
         let mut children = Vec::new();
         if let Some(ele) = seq.get(i) {
-            children.push(fnv_hash((&seq[..i], ele)));
+            children.push(make_key((&seq[..i], ele)));
         }
         Self {
             key,
@@ -54,6 +54,16 @@ where
         self.children.len()
     }
 
+    pub(crate) fn remove_child(&mut self, key: &u64) -> bool {
+        if let Some(idx) = self.children.iter().position(|c| c == key) {
+            self.children.remove(idx);
+            if self.child_len() > 0 { self.child_size -= 1 };
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn children<'a, 'b: 'a>(&'b self, map: &'b PreHashedMap<u64, Node<T>>) -> Vec<&Node<T>> {
         self.children.iter().map(|key| map.get(key).unwrap()).collect()
     }
@@ -61,7 +71,7 @@ where
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if let Some(ele) = seq.get(i) {
-            let key = fnv_hash((&seq[..i], ele));
+            let key = make_key((&seq[..i], ele));
             if !self.children.contains(&key) {
                 self.child_size += 1;
                 self.children.push(key);
