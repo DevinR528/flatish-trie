@@ -60,6 +60,10 @@ where
         Trie { children: PreHashedMap::default(), starts: Vec::default(), len: 0, }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
             let key = make_key((&seq[..idx], &val));
@@ -126,6 +130,7 @@ where
         }
     }
 
+    // Returns `true` if `seq_key` is found.
     pub fn contains(&self, seq_key: &[T]) -> bool {
         let key = key_from_seq(seq_key);
         self.children.contains_key(&key)
@@ -170,24 +175,28 @@ where
             next_idx: 0,
         }
     }
-    /// `key` is child key `entry` is parent node
+
+    /// Clears the `Trie`, note this leaves the previously
+    /// allocated capacity.
+    pub fn clear(&mut self) {
+        self.len = 0;
+        self.children.clear();
+        self.starts.clear();
+    }
+    /// `key` is child's key `entry` is child's parent node.
+    /// True when node has no children after _remove is called.
     fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
                 n.remove_child(&key);
             })
-            // TODO Hacky?? we can not insert ever we know all `keys` in `seq` are valid
+            // TODO Hacky?? we can't insert on a remove! we know all `keys` in `seq` are valid
             // so if `or_insert_with` runs we have a bug
             .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
-        println!("_REMOVE {:?}", node);
         node.child_len() == 0
     }
 
     pub fn remove(&mut self, seq: &[T]) -> bool {
-        let mut map = std::collections::HashMap::new();
-        map.insert("s", 1);
-        map.entry("s").and_modify(|x| *x+=1);
-
         if seq.iter().enumerate()
             .all(|(i, _)| {
                 let key = key_at_index(i, seq);
@@ -196,17 +205,23 @@ where
         {
             let mut i = seq.len() - 1;
             let mut key = key_at_index(i, seq);
-
+            
+            // since we know the sequence is in the trie if it is as long
+            // we can just clear 
+            if self.len == seq.len() {
+                self.clear();
+                return true;
+            }
             while i > 0 {
-
-                println!("{}--{:?}", key, self.children.get(&key_at_index(i - 1, seq)));
-
                 if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
+                    self.len -= 1;
                     println!("{:?}", self.children.remove(&key));
                 } else {
-                    println!("PARTY");
+                    println!("{:?}", self.children.remove(&key));
+                    self.len -= 1;
+                    return true;
                 }
-                println!("AFTER {}--{:?}", key, self.children.get(&key_at_index(i, seq)));
+                println!("{}", i);
                 i -= 1;
                 key = key_at_index(i, seq);
             }
@@ -215,12 +230,6 @@ where
             false
         }
     }
-}
-
-struct Remove<'a, T> {
-    curr: &'a mut Node<T>,
-    parent: &'a mut Node<T>,
-    to_remove: Vec<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -270,7 +279,7 @@ impl<T: Clone + PartialEq> Found<T> {
         self.temp.pop();
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct TrieIter<'a, T> {
     trie: &'a Trie<T>,
     current: Option<&'a Node<T>>,
@@ -378,10 +387,12 @@ mod tests {
         trie.insert(&['c', 'o', 'w']);
 
         trie.remove(&['c', 'a', 'r', 't']);
-        println!("{:?}", trie);
         for (i, n) in trie.iter().enumerate() {
             assert_eq!(ord[i], n.val)
         }
+        trie.remove(&['c', 'o', 'w']);
+        trie.remove(&['c', 'a', 't']);
+        assert!(trie.is_empty());
     }
 
     #[test]

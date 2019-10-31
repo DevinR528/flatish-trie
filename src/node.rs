@@ -103,10 +103,15 @@ impl<'a, T> Iterator for NodeIter<'a, T> {
         if self.next.is_none() {
             self.all_kids.extend(self.current.children.iter().cloned());
 
-            let key = self.all_kids.remove(0);
-            let next = self.map.get(&key);
-            self.next = next;
-            self.next
+            if !self.all_kids.is_empty() {
+                let key = self.all_kids.remove(0);
+                let next = self.map.get(&key);
+                self.next = next;
+                self.next
+            } else {
+                None
+            }
+            
         // iterate depth first through children
         } else {
             // next is always Some
