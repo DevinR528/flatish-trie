@@ -23,10 +23,8 @@
 //!          a's
 //! <br>
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::collections::hash_map::Entry;
-
-use fnv::FnvHasher;
 
 mod key;
 use key::{make_key, key_from_seq, key_at_index};
@@ -176,6 +174,37 @@ where
         }
     }
 
+    /// Returns `true` if terminal node has children.
+    fn is_stem_ish(&self, seq: &[T]) -> bool {
+        let end_key = key_from_seq(seq);
+        if let Some(node) = self.children.get(&end_key) {
+            node.child_len() > 0
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if seq contains a terminal node anywhere
+    /// except the last node.
+    fn contains_terminal(&self, seq: &[T]) -> bool {
+        seq.iter().enumerate()
+            .any(|(i, _)| {
+                // every whole seq will be terminal but we only care about
+                // the middle bits.
+                if i == seq.len() - 1 { return false };
+
+                let key = key_at_index(i, seq);
+                if let Some(n) = self.children.get(&key) {
+                    n.is_terminal()
+                } else {
+                    // TODO what to do if node not found
+                    // at this point its a bug becasue we have already
+                    // checked if trie contains seq
+                    panic!("trie mutated when it shouldn't, bug")
+                }
+            })
+    }
+
     /// Clears the `Trie`, note this leaves the previously
     /// allocated capacity.
     pub fn clear(&mut self) {
@@ -202,16 +231,23 @@ where
                 let key = key_at_index(i, seq);
                 self.children.contains_key(&key)
             })
-        {
-            let mut i = seq.len() - 1;
-            let mut key = key_at_index(i, seq);
-            
+        {   
+            if self.is_stem_ish(seq) {
+                let end_key = key_from_seq(seq);
+                if let Some(node) = self.children.get_mut(&end_key) {
+                    node.terminal = false;
+                }
+                return true;
+            }
             // since we know the sequence is in the trie if it is as long
             // we can just clear 
-            if self.len == seq.len() {
+            if self.len == seq.len() && !self.contains_terminal(seq) {
                 self.clear();
                 return true;
             }
+
+            let mut i = seq.len() - 1;
+            let mut key = key_at_index(i, seq);
             while i > 0 {
                 if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
                     self.len -= 1;
@@ -294,6 +330,7 @@ where
 {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
+        println!("{:#?}", self);
         if self.current.is_none() {
             // this bails us out of the iteration
             let key = self.starts.get(self.idx)?;
@@ -393,6 +430,19 @@ mod tests {
         trie.remove(&['c', 'o', 'w']);
         trie.remove(&['c', 'a', 't']);
         assert!(trie.is_empty());
+    }
+    #[test]
+    fn trie_more_remove() {
+        let ord = &['c', 'a', 'r', 't'];
+
+        let mut trie = Trie::new();
+        trie.insert(&['c', 'a', 'r']);
+        trie.insert(&['c', 'a', 'r', 't']);
+
+        trie.remove(&['c', 'a', 'r']);
+        for (i, n) in trie.iter().enumerate() {
+            assert_eq!(ord[i], n.val)
+        }
     }
 
     #[test]
