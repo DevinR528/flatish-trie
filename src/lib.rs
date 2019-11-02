@@ -175,12 +175,12 @@ where
     }
 
     /// Returns `true` if terminal node has children.
-    fn is_stem_ish(&self, seq: &[T]) -> bool {
+    fn is_terminal_end (&self, seq: &[T]) -> bool {
         let end_key = key_from_seq(seq);
         if let Some(node) = self.children.get(&end_key) {
             node.child_len() > 0
         } else {
-            false
+            panic!("is stem ish failed bug")
         }
     }
 
@@ -205,16 +205,30 @@ where
             })
     }
 
-    /// Clears the `Trie`, note this leaves the previously
-    /// allocated capacity.
+    /// Clears the `Trie`.
+    /// Note this leaves the previously allocated capacity.
     pub fn clear(&mut self) {
         self.len = 0;
         self.children.clear();
         self.starts.clear();
     }
+    /// Removes from starts vec and removes key, value from children map.
+    fn _remove_start(&mut self, key: u64) {
+        if let Some(idx) = self.starts.iter().position(|it| it == &key) {
+            self.starts.remove(idx);
+            self.children.remove(&key);
+        } else {
+            // this should never happen because we know this key is in children
+            // hashmap
+            panic!("remove start failed bug")
+        }
+    }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
     fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
+        if key == 7245980264445315002_u64 {
+            println!("KEY MATCH {:?}\n{:?}", seq, entry);
+        }
         let node = entry
             .and_modify(|n| {
                 n.remove_child(&key);
@@ -224,48 +238,99 @@ where
             .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
         node.child_len() == 0
     }
-
+    /// Returns true if the sequence has been removed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ecs_trie::Trie;
+    /// let mut trie = Trie::new();
+    /// trie.insert(&['c', 'a', 't']);
+    /// trie.insert(&['c', 'o', 'w']);
+    /// 
+    /// assert!(trie.remove(&['c', 'a', 't']));
+    /// 
+    /// let found = trie.search(&['c']);
+    /// assert_eq!(
+    ///     found.as_collected().as_slice(),
+    ///     &[ ['c', 'o', 'w'] ]
+    /// );
+    /// ```
     pub fn remove(&mut self, seq: &[T]) -> bool {
-        if seq.iter().enumerate()
-            .all(|(i, _)| {
-                let key = key_at_index(i, seq);
-                self.children.contains_key(&key)
-            })
-        {   
-            if self.is_stem_ish(seq) {
-                let end_key = key_from_seq(seq);
+        match self.branch_state(seq) {
+            Remove::NoMatch => false,
+            Remove::Empty => false,
+            Remove::Terminal => panic!("not used"),
+            Remove::Rest => {
+                self.clear();
+                true
+            },
+            Remove::Stemish(end_key) => {
                 if let Some(node) = self.children.get_mut(&end_key) {
                     node.terminal = false;
+                    self.len -= 1;
                 }
-                return true;
-            }
-            // since we know the sequence is in the trie if it is as long
-            // we can just clear 
-            if self.len == seq.len() && !self.contains_terminal(seq) {
-                self.clear();
-                return true;
-            }
+                true
+            },
+            Remove::Childless => {
+                let mut i = seq.len() - 1;
+                let mut key = key_at_index(i, seq);
+                while i > 0 {
+                    if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
+                        if self.len > 0 { self.len -= 1 };
+                        self.children.remove(&key);
+                        if i == 1 {
+                            self._remove_start(key_at_index(i - 1, seq))
+                        };
 
-            let mut i = seq.len() - 1;
-            let mut key = key_at_index(i, seq);
-            while i > 0 {
-                if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
-                    self.len -= 1;
-                    println!("{:?}", self.children.remove(&key));
-                } else {
-                    println!("{:?}", self.children.remove(&key));
-                    self.len -= 1;
-                    return true;
+                    } else {
+                        self.len -= 1;
+                        return true
+                    }
+                    i -= 1;
+                    key = key_at_index(i, seq);
                 }
-                println!("{}", i);
-                i -= 1;
-                key = key_at_index(i, seq);
-            }
-            true
-        } else {
-            false
+                true
+            },
         }
     }
+
+    fn branch_state(&self, seq: &[T]) -> Remove {
+        if self.is_empty() {
+            return Remove::Empty;
+        }
+        if !seq.iter().enumerate()
+            .any(|(i, _)| {
+                let key = key_at_index(i, seq);
+                !self.children.contains_key(&key)
+            })
+        {
+            Remove::NoMatch
+        } else if self.is_terminal_end(seq) {
+            let end_key = key_from_seq(seq);
+            Remove::Stemish(end_key)
+        } else if self.len == seq.len() && !self.contains_terminal(seq){
+            Remove::Rest
+        } else {
+            Remove::Childless
+        }
+    }
+}
+
+pub enum Remove {
+    /// A parent node has zero or one child and can be removed.
+    Childless,
+    /// NOT NEEDED
+    Terminal,
+    /// `Trie` is empty.
+    Empty,
+    /// Removing the last word in the trie short circuts any looping.
+    Rest,
+    /// Sequence to remove was not found in the `Trie`
+    NoMatch,
+    /// `Stemish` holds the key to the end node if end node contains children.
+    /// The word "car" would be `Stemish` to "cart".
+    Stemish(u64),
 }
 
 #[derive(Debug, Clone)]
@@ -330,7 +395,6 @@ where
 {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        println!("{:#?}", self);
         if self.current.is_none() {
             // this bails us out of the iteration
             let key = self.starts.get(self.idx)?;
@@ -343,8 +407,7 @@ where
                 .collect::<Vec<_>>();
 
             self.current
-        } else {
-            let key = self.children[self.next_idx];
+        } else if let Some(key) = self.children.get(self.idx) {
             self.current = self.trie.children.get(&key);
             self.next_idx += 1;
 
@@ -355,6 +418,11 @@ where
             } else {
                 self.current
             }
+        } else {
+            let key = self.starts.get(self.idx)?;
+            self.current = Some(self.trie.children.get(&key)?);
+            self.idx += 1;
+            self.current
         }
     }
 }
@@ -364,6 +432,7 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Read;
+    
 
     const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt"];
 
@@ -375,14 +444,14 @@ mod tests {
             .unwrap();
         contents
             .split_whitespace()
-            .map(|s| s.trim().to_string())
+            .map(|s| s.trim().to_lowercase().to_string())
             .collect()
     }
 
     fn make_trie(words: &[String]) -> Trie<char> {
         let mut trie = Trie::new();
         for w in words {
-            trie.insert(&w.chars().collect::<Vec<_>>());
+            trie.insert(&w.to_lowercase().chars().collect::<Vec<_>>());
         }
         trie
     }
@@ -445,22 +514,48 @@ mod tests {
         }
     }
 
+    use std::collections::{HashSet, hash_map::RandomState};
+    use std::iter::FromIterator;
     #[test]
     fn test_on_data() {
         // test sun rising
         let text = get_text(1);
-        let trie = make_trie(&text);
 
-        for word in text.iter() {
-            assert!(trie.contains(&word.chars().collect::<Vec<_>>()));
+        let mut unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
+        let unique_count = unique.len();
+
+        let mut trie = Trie::new();
+        for w in unique.iter() {
+            trie.insert(&w.chars().collect::<Vec<_>>());
         }
 
-        // test 1984
-        let text = get_text(0);
-        let trie = make_trie(&text);
+        let mut srtd = unique.into_iter().collect::<Vec<_>>();
+        srtd.sort_unstable();
+        println!("{:?}", srtd.last());
+        for (i, word) in srtd.iter().enumerate() {
+            // let word = w.to_lowercase();
 
-        for word in text.iter() {
-            assert!(trie.contains(&word.chars().collect::<Vec<_>>()));
+            // println!("{} at {}/{}  unique: {:?}", word, i + 1, unique_count, srtd[i]);
+            assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "{}", word);
+            trie.remove(&word.chars().collect::<Vec<_>>());
         }
+
+        println!("{:#?}", trie.search(&['?']));
+
+        trie.iter().for_each(|n| {
+            println!("{} {}", n.val, n.child_len())
+        });
+        println!("{}", trie.len);
+        assert!(trie.is_empty());
+
+        // // test 1984
+        // let text = get_text(0);
+        // let mut trie = make_trie(&text);
+
+        // for word in text.iter() {
+        //     assert!(trie.contains(&word.chars().collect::<Vec<_>>()));
+        //     trie.remove(&word.chars().collect::<Vec<_>>());
+        // }
+        // assert!(trie.is_empty());
     }
 }

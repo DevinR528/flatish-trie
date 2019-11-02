@@ -64,7 +64,7 @@ where
         }
     }
 
-    pub(crate) fn children<'a, 'b: 'a>(&'b self, map: &'b PreHashedMap<u64, Node<T>>) -> Vec<&Node<T>> {
+    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a PreHashedMap<u64, Node<T>>) -> Vec<&'b Node<T>> {
         self.children.iter().map(|key| map.get(key).unwrap()).collect()
     }
 
