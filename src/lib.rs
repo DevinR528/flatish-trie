@@ -70,6 +70,10 @@ where
                 // add new keys to Node.children vec
                 // we just checked its in here
                 let node = self.children.get_mut(&key).unwrap();
+
+                let terminal = seq.len() == idx + 1;
+                node.terminal = terminal;
+
                 node.update_children(seq, idx);
                 idx += 1;
                 if let Some(next) = seq.get(idx) {
@@ -92,6 +96,14 @@ where
     }
 
     pub fn insert(&mut self, seq: &[T]) {
+        if let Some(first) = seq.first() {
+            let key = make_key((&[], first));
+            if !self.starts.contains(&key) { self.starts.push(key) };
+            self._insert(seq, Some(first.clone()), 0)
+        }
+    }
+
+    pub fn insert2(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             let key = make_key((&[], first));
             if !self.starts.contains(&key) { self.starts.push(key) };
@@ -128,10 +140,16 @@ where
         }
     }
 
-    // Returns `true` if `seq_key` is found.
+    /// Returns `true` if `seq_key` is found.
+    /// Note the last item in seq_key must be a terminal node.
+    /// TODO is this a good idea (terminal node)
     pub fn contains(&self, seq_key: &[T]) -> bool {
         let key = key_from_seq(seq_key);
-        self.children.contains_key(&key)
+        let mut term = false;
+        if let Some(n) = self.children.get(&key) {
+            term = n.is_terminal();
+        }
+        self.children.contains_key(&key) && term
     }
 
     /// Returns all of the found sequences, walking
@@ -187,7 +205,8 @@ where
     /// Returns true if seq contains a terminal node anywhere
     /// except the last node.
     fn contains_terminal(&self, seq: &[T]) -> bool {
-        seq.iter().enumerate()
+        seq.iter()
+            .enumerate()
             .any(|(i, _)| {
                 // every whole seq will be terminal but we only care about
                 // the middle bits.
@@ -203,6 +222,45 @@ where
                     panic!("trie mutated when it shouldn't, bug")
                 }
             })
+    }
+
+    /// Returns index in seq and key to first safe non terminal node anywhere.
+    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, u64)> {
+        if seq.iter().enumerate()
+            .any(|(i, _)| {
+                // every whole seq will be terminal but we only care about
+                // the middle bits.
+                if i == seq.len() - 1 { return false };
+
+                let key = key_at_index(i, seq);
+                if let Some(n) = self.children.get(&key) {
+                    n.is_terminal()
+                } else {
+                    // TODO what to do if node not found
+                    // at this point its a bug becasue we have already
+                    // checked if trie contains seq
+                    panic!("trie mutated when it shouldn't, bug")
+                }
+            })
+        {
+            let mut key = key_from_seq(seq);
+            seq.iter()
+                .enumerate()
+                .rev()
+                .skip(1)
+                .find(|(i, _)| {
+                    println!("{:?}", self.children.get(&key));
+                    if let Some(node) = self.children.get(&key) {
+                        node.is_terminal()
+                    } else {
+                        key = key_at_index(*i, seq);
+                        false
+                    }
+                })
+                .map(|(i, _)| (i, key))
+        } else {
+            None
+        }
     }
 
     /// Clears the `Trie`.
@@ -226,11 +284,9 @@ where
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
     fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
-        if key == 7245980264445315002_u64 {
-            println!("KEY MATCH {:?}\n{:?}", seq, entry);
-        }
         let node = entry
             .and_modify(|n| {
+                println!("{:?}", n);
                 n.remove_child(&key);
             })
             // TODO Hacky?? we can't insert on a remove! we know all `keys` in `seq` are valid
@@ -260,15 +316,25 @@ where
         match self.branch_state(seq) {
             Remove::NoMatch => false,
             Remove::Empty => false,
-            Remove::Terminal => panic!("not used"),
             Remove::Rest => {
                 self.clear();
+                true
+            },
+            Remove::Terminal(idx, non_term_key) => {
+                let mut i = idx;
+                let mut key = non_term_key;
+                while i < seq.len() {
+                    self.children.remove(&key);
+                    key = key_at_index(i, seq);
+                    self.len -= 1;
+                    i += 1;
+                }
                 true
             },
             Remove::Stemish(end_key) => {
                 if let Some(node) = self.children.get_mut(&end_key) {
                     node.terminal = false;
-                    self.len -= 1;
+                    // self.len -= 1;
                 }
                 true
             },
@@ -277,14 +343,18 @@ where
                 let mut key = key_at_index(i, seq);
                 while i > 0 {
                     if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
-                        if self.len > 0 { self.len -= 1 };
+                        self.len -= 1;
                         self.children.remove(&key);
                         if i == 1 {
-                            self._remove_start(key_at_index(i - 1, seq))
+                            let first_key = key_at_index(i - 1, seq);
+                            let node = self.children.get(&first_key).expect("key has been checked for match previously bug");
+                            if node.is_terminal() {
+                                self._remove_start(first_key);
+                                return true;
+                            }
                         };
-
                     } else {
-                        self.len -= 1;
+                        // self.len -= 1;
                         return true
                     }
                     i -= 1;
@@ -299,19 +369,27 @@ where
         if self.is_empty() {
             return Remove::Empty;
         }
+        
         if !seq.iter().enumerate()
-            .any(|(i, _)| {
+            .all(|(i, _)| {
                 let key = key_at_index(i, seq);
-                !self.children.contains_key(&key)
+                self.children.contains_key(&key)
             })
         {
             Remove::NoMatch
+        } else if self.len == seq.len() && !self.contains_terminal(seq){
+            println!("Rest");
+            Remove::Rest
         } else if self.is_terminal_end(seq) {
+            println!("Stem");
             let end_key = key_from_seq(seq);
             Remove::Stemish(end_key)
-        } else if self.len == seq.len() && !self.contains_terminal(seq){
-            Remove::Rest
         } else {
+            println!("OTHER");
+            if let Some((i, non_term_key)) = self.contains_terminal_with_key(seq) {
+                println!("CONTAIN Term");
+                return Remove::Terminal(i, non_term_key);
+            }
             Remove::Childless
         }
     }
@@ -320,8 +398,9 @@ where
 pub enum Remove {
     /// A parent node has zero or one child and can be removed.
     Childless,
-    /// NOT NEEDED
-    Terminal,
+    /// If sequence contains any terminal nodes, `Terminal` holds the
+    /// key to first safe to remove non terminal node.
+    Terminal(usize, u64),
     /// `Trie` is empty.
     Empty,
     /// Removing the last word in the trie short circuts any looping.
@@ -433,6 +512,21 @@ mod tests {
     use std::fs::File;
     use std::io::Read;
     
+    #[test]
+    fn removing_tests() {
+        let mut t = Trie::new();
+        t.insert(&['c', 'a', 'r']);
+        t.insert(&['c', 'a', 'r', 't']);
+        t.insert(&['c', 'a', 'r', 't', 'y']);
+
+        println!("{}", t.remove(&['c', 'a', 'r', 't', 'y']));
+        println!("{:#?}", t);
+        t.remove(&['c', 'a', 'r', 't']);
+        println!("{:#?}", t);
+        t.remove(&['c', 'a', 'r']);
+        println!("{:#?}", t);
+        // assert!(t.is_empty());
+    }
 
     const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt"];
 
@@ -484,15 +578,16 @@ mod tests {
     }
 
     #[test]
-    fn trie_remove() {
+    fn trie_removing() {
         let ord = &['c', 'a', 't', 'o', 'w'];
 
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'a', 'r', 't']);
         trie.insert(&['c', 'o', 'w']);
-
+        println!("{:#?}", trie);
         trie.remove(&['c', 'a', 'r', 't']);
+        println!("{:#?}", trie);
         for (i, n) in trie.iter().enumerate() {
             assert_eq!(ord[i], n.val)
         }
@@ -501,7 +596,7 @@ mod tests {
         assert!(trie.is_empty());
     }
     #[test]
-    fn trie_more_remove() {
+    fn trie_more_removing() {
         let ord = &['c', 'a', 'r', 't'];
 
         let mut trie = Trie::new();
@@ -509,9 +604,8 @@ mod tests {
         trie.insert(&['c', 'a', 'r', 't']);
 
         trie.remove(&['c', 'a', 'r']);
-        for (i, n) in trie.iter().enumerate() {
-            assert_eq!(ord[i], n.val)
-        }
+        assert!(trie.contains(&['c', 'a', 'r', 't']));
+        assert!(!trie.contains(&['c', 'a', 'r']))
     }
 
     use std::collections::{HashSet, hash_map::RandomState};

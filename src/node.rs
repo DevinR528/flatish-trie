@@ -57,7 +57,8 @@ where
     pub(crate) fn remove_child(&mut self, key: &u64) -> bool {
         if let Some(idx) = self.children.iter().position(|c| c == key) {
             self.children.remove(idx);
-            if self.child_len() > 0 { self.child_size -= 1 };
+            self.child_size -= 1;
+            // if self.child_len() > 0 { self.child_size -= 1 };
             true
         } else {
             false
