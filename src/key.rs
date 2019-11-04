@@ -9,10 +9,10 @@ fn make_key<T: Hash>(to_hash: (&[T], &T), len: usize, seq: &[T]) -> u128 {
     // to_hash.hash(&mut hasher);
     // //len.hash(&mut hasher);
     // hasher.finish()
-    let mut hasher = SpookyHasherExt::default();
-    len.hash(&mut hasher);
+    let mut hasher = MetroHasherExt::default();
+    //len.hash(&mut hasher);
     to_hash.hash(&mut hasher);
-    seq.hash(&mut hasher);
+    //seq.hash(&mut hasher);
     hasher.finish_ext()
 
 }
@@ -21,7 +21,7 @@ pub(crate) fn key_from_seq<T: Hash>(seq: &[T]) -> u128 {
     let i = seq.len() - 1;
     make_key((&seq[..i], &seq[i]), seq.len(), seq)
 }
-
+/// End of sequence
 pub(crate) fn key_at_index<T: Hash>(idx: usize, seq: &[T]) -> u128 {
     make_key((&seq[..idx], &seq[idx]), seq.len(), seq)
 }

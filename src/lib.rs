@@ -86,6 +86,13 @@ where
             let node = Node::new(val, &seq, idx, terminal);
             self.children.insert(key, node);
             self.len += 1;
+
+            if idx > 0 {
+                if let Some(n) = self.children.get_mut(&key_at_index(idx - 1, seq)) {
+                    n.children.push(key);
+                    n.child_size += 1;
+                }
+            }
             // if terminal { return };
             idx += 1;
             if let Some(next) = seq.get(idx) {
@@ -645,13 +652,16 @@ mod tests {
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'a', 'r', 't']);
         trie.insert(&['c', 'o', 'w']);
-
+        println!("{:?}", trie);
         trie.remove(&['c', 'a', 'r', 't']);
+        println!("{:?}", trie);
         for (i, n) in trie.iter().enumerate() {
             assert_eq!(ord[i], n.val)
         }
         trie.remove(&['c', 'o', 'w']);
+        println!("{:?}", trie);
         trie.remove(&['c', 'a', 't']);
+        println!("{:?}", trie);
         assert!(trie.is_empty());
     }
     #[test]
@@ -701,7 +711,7 @@ mod tests {
     #[test]
     fn test_on_data() {
         // test sun rising
-        let text = get_text(0);
+        let text = get_text(2);
 
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let mut srtd = unique.iter().collect::<Vec<_>>();
