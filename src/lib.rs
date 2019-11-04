@@ -35,8 +35,8 @@ pub use noop_hash::PreHashedMap;
 
 #[derive(Debug, Clone)]
 pub struct Trie<T> {
-    starts: Vec<u64>,
-    children: PreHashedMap<u64, Node<T>>,
+    starts: Vec<u128>,
+    children: PreHashedMap<u128, Node<T>>,
     /// number of unique items T inserted into the trie.
     len: usize,
 }
@@ -159,7 +159,7 @@ where
     // }
 
     fn _search<'n>(
-        map: &PreHashedMap<u64, Node<T>>,
+        map: &PreHashedMap<u128, Node<T>>,
         node: &'n Node<T>,
         seq_key: &[T],
         idx: usize,
@@ -272,7 +272,7 @@ where
     }
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
-    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, u64)> {
+    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, u128)> {
         if seq.iter().enumerate()
             .any(|(i, _)| {
                 // every whole seq will be terminal but we only care about
@@ -317,7 +317,7 @@ where
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
-    fn _remove_start(&mut self, key: u64) -> bool {
+    fn _remove_start(&mut self, key: u128) -> bool {
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
             self.starts.remove(idx);
             self.children.remove(&key);
@@ -329,7 +329,7 @@ where
     }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
-    fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
+    fn _remove(seq: &[T], key: u128, entry: Entry<u128, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
                 //println!("{:?}", n);
@@ -474,13 +474,13 @@ pub enum Remove {
     /// Sequence to remove was not found in the `Trie`
     NoMatch,
     /// Single item in sequence, remove from starts.
-    Starts(u64),
+    Starts(u128),
     /// `Stemish` holds the key to the end node if end node contains children.
     /// The word "car" would be `Stemish` to "cart".
-    Stemish(u64),
+    Stemish(u128),
     /// If sequence contains any terminal nodes, `Terminal` holds the
     /// key to first safe to remove non terminal node.
-    Terminal(usize, u64),
+    Terminal(usize, u128),
 }
 
 #[derive(Debug, Clone)]
@@ -534,8 +534,8 @@ impl<T: Clone + PartialEq> Found<T> {
 pub struct TrieIter<'a, T> {
     trie: &'a Trie<T>,
     current: Option<&'a Node<T>>,
-    starts: &'a [u64],
-    children: Vec<u64>,
+    starts: &'a [u128],
+    children: Vec<u128>,
     idx: usize,
     next_idx: usize,
 }
@@ -701,7 +701,7 @@ mod tests {
     #[test]
     fn test_on_data() {
         // test sun rising
-        let text = get_text(1);
+        let text = get_text(0);
 
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let mut srtd = unique.iter().collect::<Vec<_>>();
