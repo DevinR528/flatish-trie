@@ -27,7 +27,7 @@ use std::hash::Hash;
 use std::collections::hash_map::Entry;
 
 mod key;
-use key::{make_key, key_from_seq, key_at_index};
+use key::{key_from_seq, key_at_index};
 mod node;
 use node::{Node};
 mod noop_hash;
@@ -65,7 +65,7 @@ where
     /// TODO make this insert in reverse check if optimizes.
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
-            let key = make_key((&seq[..idx], &val));
+            let key = key_at_index(idx, seq);
 
             if self.children.contains_key(&key) {
                 // add new keys to Node.children vec
@@ -112,7 +112,7 @@ where
     /// ```
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
-            let key = make_key((&[], first));
+            let key = key_at_index(0, seq);
             if !self.starts.contains(&key) { self.starts.push(key) };
             self._insert(seq, Some(first.clone()), 0)
         }
@@ -321,6 +321,7 @@ where
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
             self.starts.remove(idx);
             self.children.remove(&key);
+            self.len -= 1;
             true
         } else {
             false
@@ -331,7 +332,7 @@ where
     fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
-                println!("{:?}", n);
+                //println!("{:?}", n);
                 n.remove_child(&key);
             })
             // TODO Hacky?? we can't insert on a remove! we know all `keys` in `seq` are valid
@@ -399,14 +400,15 @@ where
                 let mut key = key_at_index(i, seq);
                 
                 while i > 0 {
+                    //println!("KE?YAT {:?}", self.children.get(&key_at_index(i - 1, seq)));
                     if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
-                        println!("KE?YAT {:?}", self.children.get(&key));
+                        //println!("KE?YAT {:?}", self.children.get(&key));
                         self.len -= 1;
                         self.children.remove(&key);
                         if i == 1 {
-                            let first_key = key_at_index(i - 1, seq);
+                            let first_key = key_at_index(0, seq);
                             let node = self.children.get(&first_key).expect("key has been checked for match previously bug");
-                            if node.is_terminal() {
+                            if !node.is_terminal() {
                                 self._remove_start(first_key);
                                 return true;
                             }
@@ -581,7 +583,12 @@ mod tests {
     use std::fs::File;
     use std::io::Read;
 
-    const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt"];
+    const DATA: &[&str] = &[
+        "data/1984.txt",
+        "data/sun-rising.txt",
+        "data/small.txt",
+        "data/words.txt",  
+    ];
 
     fn get_text(i: usize) -> Vec<String> {
         let mut contents = String::new();
@@ -660,6 +667,7 @@ mod tests {
 
         t.remove(&['c', 'a', 'r', 't']);
         t.remove(&['c', 'a', 'r']);
+        println!("{:?}", t);
         assert!(t.is_empty());
     }
     #[test]
@@ -710,13 +718,10 @@ mod tests {
             trie.remove(&word.chars().collect::<Vec<_>>());
         }
 
-        println!("{:#?}", trie.search(&['?']));
-
-        trie.iter().for_each(|n| {
+        trie.children.values().for_each(|n| {
             println!("{} {}", n.val, n.child_len())
         });
         println!("{}", trie.len);
-        //println!("{:#?}", trie);
         assert!(trie.is_empty());
 
         // // test 1984

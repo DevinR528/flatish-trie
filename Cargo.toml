@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 fnv = "1.0"
+fasthash = "0.4"
 
 [dev-dependencies]
 criterion = "0.3"

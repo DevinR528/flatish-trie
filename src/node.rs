@@ -1,7 +1,7 @@
 // use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::fmt::Debug;
-use crate::{make_key, Trie, PreHashedMap};
+use crate::{key_at_index, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
@@ -23,7 +23,7 @@ where
     T: Eq + Hash + Clone + Debug,
 {
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
-        let key = make_key((&seq[..idx], &seq[idx]));
+        let key = key_at_index(idx, seq);
         let children = Vec::new();
         Self {
             key,
@@ -69,7 +69,7 @@ where
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if let Some(ele) = seq.get(i) {
-            let key = make_key((&seq[..i], ele));
+            let key = key_at_index(i, seq);
             if !self.children.contains(&key) {
                 self.child_size += 1;
                 self.children.push(key);
