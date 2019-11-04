@@ -62,6 +62,7 @@ where
         self.len == 0
     }
 
+    /// TODO make this insert in reverse check if optimizes.
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
             let key = make_key((&seq[..idx], &val));
@@ -71,11 +72,9 @@ where
                 // we just checked its in here
                 let node = self.children.get_mut(&key).unwrap();
 
-                let terminal = seq.len() == idx + 1;
-                node.terminal = terminal;
-
                 node.update_children(seq, idx);
                 idx += 1;
+
                 if let Some(next) = seq.get(idx) {
                     self._insert(seq, Some(next.clone()), idx);
                     return;
@@ -94,7 +93,23 @@ where
             }
         }
     }
-
+    /// Inserts a `seq` or sequence into the trie.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ecs_trie::Trie;
+    /// let mut trie = Trie::new();
+    /// trie.insert(&['c', 'a', 't']);
+    /// trie.insert(&['c', 'o', 'w']);
+    /// 
+    /// let found = trie.search(&['c']);
+    /// 
+    /// assert_eq!(
+    ///     found.as_collected().as_slice(),
+    ///     &[ ['c', 'a', 't'], ['c', 'o', 'w'] ]
+    /// );
+    /// ```
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             let key = make_key((&[], first));
@@ -103,13 +118,45 @@ where
         }
     }
 
-    pub fn insert2(&mut self, seq: &[T]) {
-        if let Some(first) = seq.first() {
-            let key = make_key((&[], first));
-            if !self.starts.contains(&key) { self.starts.push(key) };
-            self._insert(seq, Some(first.clone()), 0)
-        }
-    }
+    // fn _insert2(
+    //     &mut self,
+    //     seq: &[T],
+    //     val: T,
+    //     mut idx: usize,
+    //     child_key: Option<u64>,
+    // ) {
+    //     let key = key_at_index(idx, seq);
+    //     let terminal = seq.len() == idx + 1;
+
+    //     if self.children.contains_key(&key)  {
+    //         return;
+    //     }
+
+    //     if idx != 0 {
+    //         if let Some(kid_key) = child_key {
+    //             let mut node = Node::new(val, seq, idx, terminal);
+    //             node.update_children2(kid_key);
+    //             self.children.insert(key, node);
+    //             idx -= 1;
+    //             if let Some(next) = seq.get(idx) {
+    //                 self._insert2(seq, next.clone(), idx, Some(key))
+    //             }
+    //         } else {
+    //             let node = Node::new(val, seq, idx, terminal);
+    //             self.children.insert(key, node);
+    //             idx -= 1;
+    //             if let Some(next) = seq.get(idx) {
+    //                 self._insert2(seq, next.clone(), idx, Some(key))
+    //             }
+    //         }
+    //     }
+    // }
+
+    // pub fn insert2(&mut self, seq: &[T]) {
+    //     if let Some(end) = seq.last() {
+    //         self._insert2(seq, end.clone(), seq.len() - 1, None)
+    //     }
+    // }
 
     fn _search<'n>(
         map: &PreHashedMap<u64, Node<T>>,
@@ -249,11 +296,10 @@ where
                 .rev()
                 .skip(1)
                 .find(|(i, _)| {
-                    println!("{:?}", self.children.get(&key));
+                    let key = key_at_index(*i, seq);
                     if let Some(node) = self.children.get(&key) {
                         node.is_terminal()
                     } else {
-                        key = key_at_index(*i, seq);
                         false
                     }
                 })
@@ -271,14 +317,13 @@ where
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
-    fn _remove_start(&mut self, key: u64) {
+    fn _remove_start(&mut self, key: u64) -> bool {
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
             self.starts.remove(idx);
             self.children.remove(&key);
+            true
         } else {
-            // this should never happen because we know this key is in children
-            // hashmap
-            panic!("remove start failed bug")
+            false
         }
     }
     /// `key` is child's key `entry` is child's parent node.
@@ -316,19 +361,30 @@ where
         match self.branch_state(seq) {
             Remove::NoMatch => false,
             Remove::Empty => false,
+            Remove::Starts(key) => {
+                self._remove_start(key)
+            },
             Remove::Rest => {
                 self.clear();
                 true
             },
-            Remove::Terminal(idx, non_term_key) => {
-                let mut i = idx;
-                let mut key = non_term_key;
-                while i < seq.len() {
-                    self.children.remove(&key);
-                    key = key_at_index(i, seq);
+            Remove::Terminal(mut idx, mut key) => {
+                if self.children.remove(&key).is_some() {
+                    if let Some(n) = self.children.get_mut(&key_at_index(idx, seq)) {
+                        n.remove_child(&key);
+                    }
                     self.len -= 1;
-                    i += 1;
                 }
+                idx += 1;
+
+                while idx < seq.len() {
+                    key = key_at_index(idx, seq);
+                    if self.children.remove(&key).is_some() {
+                        self.len -= 1;
+                    }
+                    idx += 1;
+                }
+                
                 true
             },
             Remove::Stemish(end_key) => {
@@ -341,8 +397,10 @@ where
             Remove::Childless => {
                 let mut i = seq.len() - 1;
                 let mut key = key_at_index(i, seq);
+                
                 while i > 0 {
                     if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
+                        println!("KE?YAT {:?}", self.children.get(&key));
                         self.len -= 1;
                         self.children.remove(&key);
                         if i == 1 {
@@ -369,7 +427,9 @@ where
         if self.is_empty() {
             return Remove::Empty;
         }
-        
+        if seq.len() == 1 {
+            return Remove::Starts(key_from_seq(seq));
+        }
         if !seq.iter().enumerate()
             .all(|(i, _)| {
                 let key = key_at_index(i, seq);
@@ -387,7 +447,7 @@ where
         } else {
             println!("OTHER");
             if let Some((i, non_term_key)) = self.contains_terminal_with_key(seq) {
-                println!("CONTAIN Term");
+                println!("seq={:?} idx={} key={}", seq, i, non_term_key);
                 return Remove::Terminal(i, non_term_key);
             }
             Remove::Childless
@@ -395,21 +455,30 @@ where
     }
 }
 
+// TODO for rev insert
+// pub enum Insert {
+//     Contains,
+//     Child(u64),
+//     First(u64),
+// }
+
 pub enum Remove {
     /// A parent node has zero or one child and can be removed.
     Childless,
-    /// If sequence contains any terminal nodes, `Terminal` holds the
-    /// key to first safe to remove non terminal node.
-    Terminal(usize, u64),
     /// `Trie` is empty.
     Empty,
     /// Removing the last word in the trie short circuts any looping.
     Rest,
     /// Sequence to remove was not found in the `Trie`
     NoMatch,
+    /// Single item in sequence, remove from starts.
+    Starts(u64),
     /// `Stemish` holds the key to the end node if end node contains children.
     /// The word "car" would be `Stemish` to "cart".
     Stemish(u64),
+    /// If sequence contains any terminal nodes, `Terminal` holds the
+    /// key to first safe to remove non terminal node.
+    Terminal(usize, u64),
 }
 
 #[derive(Debug, Clone)]
@@ -511,22 +580,6 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Read;
-    
-    #[test]
-    fn removing_tests() {
-        let mut t = Trie::new();
-        t.insert(&['c', 'a', 'r']);
-        t.insert(&['c', 'a', 'r', 't']);
-        t.insert(&['c', 'a', 'r', 't', 'y']);
-
-        println!("{}", t.remove(&['c', 'a', 'r', 't', 'y']));
-        println!("{:#?}", t);
-        t.remove(&['c', 'a', 'r', 't']);
-        println!("{:#?}", t);
-        t.remove(&['c', 'a', 'r']);
-        println!("{:#?}", t);
-        // assert!(t.is_empty());
-    }
 
     const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt"];
 
@@ -558,7 +611,7 @@ mod tests {
         trie.insert(&['c', 'a', 'r', 't']);
         trie.insert(&['c', 'o', 'w']);
         let found = trie.search(&['c']);
-        println!("{:?}", found);
+        // println!("{:?}", found);
         for (expected, found) in cmp_found.iter().zip(found.as_collected()) {
             assert_eq!(&expected[..], found)
         }
@@ -578,16 +631,15 @@ mod tests {
     }
 
     #[test]
-    fn trie_removing() {
+    fn trie_remove_with_child() {
         let ord = &['c', 'a', 't', 'o', 'w'];
 
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 't']);
         trie.insert(&['c', 'a', 'r', 't']);
         trie.insert(&['c', 'o', 'w']);
-        println!("{:#?}", trie);
+
         trie.remove(&['c', 'a', 'r', 't']);
-        println!("{:#?}", trie);
         for (i, n) in trie.iter().enumerate() {
             assert_eq!(ord[i], n.val)
         }
@@ -596,9 +648,37 @@ mod tests {
         assert!(trie.is_empty());
     }
     #[test]
-    fn trie_more_removing() {
-        let ord = &['c', 'a', 'r', 't'];
+    fn trie_remove_with_terminal() {
+        let mut t = Trie::new();
+        t.insert(&['c', 'a', 'r']);
+        t.insert(&['c', 'a', 'r', 't']);
+        //t.insert(&['c', 'a', 'r', 't', 'y']);
+        t.insert(&['c', 'a', 'r', 'r', 'o', 't']);
 
+        t.remove(&['c', 'a', 'r', 'r', 'o', 't']);
+        assert!(t.contains(&['c', 'a', 'r', 't']));
+
+        t.remove(&['c', 'a', 'r', 't']);
+        t.remove(&['c', 'a', 'r']);
+        assert!(t.is_empty());
+    }
+    #[test]
+    fn trie_remove_with_terminal_end() {
+        let mut t = Trie::new();
+        t.insert(&['c', 'a', 'r']);
+        t.insert(&['c', 'a', 'r', 't']);
+        t.insert(&['c', 'a', 'r', 't', 'y']);
+
+        t.remove(&['c', 'a', 'r', 't', 'y']);
+        assert!(t.contains(&['c', 'a', 'r', 't']));
+        assert!(t.contains(&['c', 'a', 'r']));
+
+        t.remove(&['c', 'a', 'r', 't']);
+        t.remove(&['c', 'a', 'r']);
+        assert!(t.is_empty());
+    }
+    #[test]
+    fn trie_remove_with_inner_terminal() {
         let mut trie = Trie::new();
         trie.insert(&['c', 'a', 'r']);
         trie.insert(&['c', 'a', 'r', 't']);
@@ -615,22 +695,18 @@ mod tests {
         // test sun rising
         let text = get_text(1);
 
-        let mut unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
-        let unique_count = unique.len();
+        let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
+        let mut srtd = unique.iter().collect::<Vec<_>>();
+        srtd.sort();
 
         let mut trie = Trie::new();
-        for w in unique.iter() {
+        for w in srtd.iter() {
             trie.insert(&w.chars().collect::<Vec<_>>());
         }
 
-        let mut srtd = unique.into_iter().collect::<Vec<_>>();
-        srtd.sort_unstable();
-        println!("{:?}", srtd.last());
         for (i, word) in srtd.iter().enumerate() {
-            // let word = w.to_lowercase();
-
-            // println!("{} at {}/{}  unique: {:?}", word, i + 1, unique_count, srtd[i]);
-            assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "{}", word);
+            println!("{} at {}/{}  unique: {:?}", word, i + 1, unique.len(), srtd[i]);
+            assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "does not contain {}", word);
             trie.remove(&word.chars().collect::<Vec<_>>());
         }
 
@@ -640,6 +716,7 @@ mod tests {
             println!("{} {}", n.val, n.child_len())
         });
         println!("{}", trie.len);
+        //println!("{:#?}", trie);
         assert!(trie.is_empty());
 
         // // test 1984

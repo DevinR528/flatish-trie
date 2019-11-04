@@ -24,11 +24,7 @@ where
 {
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
         let key = make_key((&seq[..idx], &seq[idx]));
-        let i = idx + 1;
-        let mut children = Vec::new();
-        if let Some(ele) = seq.get(i) {
-            children.push(make_key((&seq[..i], ele)));
-        }
+        let children = Vec::new();
         Self {
             key,
             val,
@@ -68,7 +64,8 @@ where
     pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a PreHashedMap<u64, Node<T>>) -> Vec<&'b Node<T>> {
         self.children.iter().map(|key| map.get(key).unwrap()).collect()
     }
-
+    /// Adds next `u64` key to `Node.children` if it can be made from
+    /// `seq[idx + 1]`. 
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if let Some(ele) = seq.get(i) {
