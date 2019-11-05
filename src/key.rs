@@ -5,16 +5,9 @@ use fasthash::{MetroHasher, FarmHasher, Lookup3Hasher, CityHasher, Murmur3Hasher
 use fnv::FnvHasher;
 
 fn make_key<T: Hash>(to_hash: (&[T], &T), len: usize, seq: &[T]) -> u64 {
-    // let mut hasher = FnvHasher::default();
-    // to_hash.hash(&mut hasher);
-    // //len.hash(&mut hasher);
-    // hasher.finish()
-    let mut hasher = FnvHasher::default();
-    //len.hash(&mut hasher);
+    let mut hasher = CityHasher::default();
     to_hash.hash(&mut hasher);
-    //seq.hash(&mut hasher);
     hasher.finish()
-
 }
 /// Length of sequence minus one
 pub(crate) fn key_from_seq<T: Hash>(seq: &[T]) -> u64 {

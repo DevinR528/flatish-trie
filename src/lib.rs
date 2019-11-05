@@ -86,6 +86,14 @@ where
             let node = Node::new(val, &seq, idx, terminal);
             self.children.insert(key, node);
             self.len += 1;
+            if idx > 0 {
+                if let Some(n) = self.children.get_mut(&key_at_index(idx -1, seq)) {
+                    if !n.children.contains(&key) {
+                        n.children.push(key);
+                        n.child_size += 1;
+                    }
+                }
+            }
             // if terminal { return };
             idx += 1;
             if let Some(next) = seq.get(idx) {
@@ -414,6 +422,10 @@ where
                             }
                         };
                     } else {
+                        if self.children.get(&key).unwrap().child_len() == 0 {
+                            self.children.remove(&key);
+                            self.len -= 1;
+                        }
                         // self.len -= 1;
                         return true
                     }
@@ -440,16 +452,16 @@ where
         {
             Remove::NoMatch
         } else if self.len == seq.len() && !self.contains_terminal(seq){
-            println!("Rest");
+            // println!("Rest");
             Remove::Rest
         } else if self.is_terminal_end(seq) {
-            println!("Stem");
+            // println!("Stem");
             let end_key = key_from_seq(seq);
             Remove::Stemish(end_key)
         } else {
-            println!("OTHER");
+            // println!("OTHER");
             if let Some((i, non_term_key)) = self.contains_terminal_with_key(seq) {
-                println!("seq={:?} idx={} key={}", seq, i, non_term_key);
+                // println!("seq={:?} idx={} key={}", seq, i, non_term_key);
                 return Remove::Terminal(i, non_term_key);
             }
             Remove::Childless
@@ -545,7 +557,7 @@ where
 {
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        println!("{:?}", self);
+        //println!("{:?}", self);
         if self.current.is_none() {
             // this bails us out of the iteration
             let key = self.starts.get(self.idx)?;
@@ -556,9 +568,9 @@ where
                 .walk(self.trie)
                 .map(|n| n.key)
                 .collect::<Vec<_>>();
-
+            println!("{:?}", self.current);
             self.current
-        } else if let Some(key) = self.children.get(self.idx) {
+        } else if let Some(key) = self.children.get(self.next_idx) {
             self.current = self.trie.children.get(&key);
             self.next_idx += 1;
 
@@ -583,13 +595,6 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Read;
-
-    const DATA: &[&str] = &[
-        "data/1984.txt",
-        "data/sun-rising.txt",
-        "data/small.txt",
-        "data/words.txt",  
-    ];
 
     fn get_text(i: usize) -> Vec<String> {
         let mut contents = String::new();
@@ -650,10 +655,11 @@ mod tests {
 
         trie.remove(&['c', 'a', 'r', 't']);
         for (i, n) in trie.iter().enumerate() {
-            assert_eq!(ord[i], n.val)
+            assert_eq!(ord[i], n.val);
         }
         trie.remove(&['c', 'o', 'w']);
         trie.remove(&['c', 'a', 't']);
+
         assert!(trie.is_empty());
     }
     #[test]
@@ -669,7 +675,6 @@ mod tests {
 
         t.remove(&['c', 'a', 'r', 't']);
         t.remove(&['c', 'a', 'r']);
-        println!("{:?}", t);
         assert!(t.is_empty());
     }
     #[test]
@@ -700,10 +705,18 @@ mod tests {
 
     use std::collections::{HashSet, hash_map::RandomState};
     use std::iter::FromIterator;
+
+    const DATA: &[&str] = &[
+        "data/1984.txt",
+        "data/sun-rising.txt",
+        "data/small.txt",
+        "data/words.txt",  
+    ];
+
     #[test]
     fn test_on_data() {
         // test sun rising
-        let text = get_text(1);
+        let text = get_text(0);
 
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let mut srtd = unique.iter().collect::<Vec<_>>();
@@ -715,7 +728,6 @@ mod tests {
         }
 
         for (i, word) in srtd.iter().enumerate() {
-            println!("{} at {}/{}  unique: {:?}", word, i + 1, unique.len(), srtd[i]);
             assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "does not contain {}", word);
             trie.remove(&word.chars().collect::<Vec<_>>());
         }
