@@ -568,7 +568,6 @@ where
                 .walk(self.trie)
                 .map(|n| n.key)
                 .collect::<Vec<_>>();
-            println!("{:?}", self.current);
             self.current
         } else if let Some(key) = self.children.get(self.next_idx) {
             self.current = self.trie.children.get(&key);
@@ -639,8 +638,7 @@ mod tests {
         trie.insert(&['c', 'o', 'w']);
         
         for (i, n) in trie.iter().enumerate() {
-            println!("{:?}", n);
-            // assert_eq!(ord[i], n.val)
+            assert_eq!(ord[i], n.val)
         }
     }
 
@@ -716,10 +714,11 @@ mod tests {
     #[test]
     fn test_on_data() {
         // test sun rising
-        let text = get_text(0);
+        let text = get_text(1);
 
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let mut srtd = unique.iter().collect::<Vec<_>>();
+        println!("COUNT {}", unique.iter().flat_map(|w| w.chars()).count());
         srtd.sort();
 
         let mut trie = Trie::new();
