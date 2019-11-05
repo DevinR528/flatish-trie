@@ -68,7 +68,7 @@ where
     /// `seq[idx + 1]`. 
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
-        if let Some(ele) = seq.get(i) {
+        if let Some(_) = seq.get(i) {
             let key = key_at_index(i, seq);
             if !self.children.contains(&key) {
                 self.child_size += 1;
