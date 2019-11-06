@@ -24,7 +24,7 @@
 //! <br>
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::collections::hash_map::Entry;
+use std::collections::{HashMap, hash_map::Entry};
 
 mod key;
 use key::{key_from_seq, key_at_index};
@@ -34,16 +34,22 @@ mod noop_hash;
 pub use noop_hash::PreHashedMap;
 
 #[derive(Debug, Clone)]
-pub struct Trie<T> {
-    starts: Vec<u64>,
-    children: PreHashedMap<u64, Node<T>>,
+pub struct Trie<T> 
+where
+    T: Eq + Hash,
+{
+    starts: Vec<(u64, T)>,
+    children: HashMap<(u64, T), Node<T>>,
     /// number of unique items T inserted into the trie.
     len: usize,
 }
-impl<T> Default for Trie<T> {
+impl<T> Default for Trie<T> 
+where
+    T: Eq + Hash,
+{
     fn default() -> Self {
         Self {
-            children: PreHashedMap::default(),
+            children: HashMap::new(),
             starts: Vec::default(),
             len: 0,
         }
@@ -55,7 +61,7 @@ where
     T: Eq + Hash + Clone + Debug,
 {
     pub fn new() -> Self {
-        Trie { children: PreHashedMap::default(), starts: Vec::default(), len: 0, }
+        Trie { children: HashMap::default(), starts: Vec::default(), len: 0, }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -84,7 +90,7 @@ where
 
             let terminal = seq.len() == idx + 1;
             let node = Node::new(val, &seq, idx, terminal);
-            self.children.insert(key, node);
+            self.children.insert(key.clone(), node);
             self.len += 1;
             if idx > 0 {
                 if let Some(n) = self.children.get_mut(&key_at_index(idx -1, seq)) {
@@ -167,7 +173,7 @@ where
     // }
 
     fn _search<'n>(
-        map: &PreHashedMap<u64, Node<T>>,
+        map: &HashMap<(u64, T), Node<T>>,
         node: &'n Node<T>,
         seq_key: &[T],
         idx: usize,
@@ -280,7 +286,7 @@ where
     }
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
-    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, u64)> {
+    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, (u64, T))> {
         if seq.iter().enumerate()
             .any(|(i, _)| {
                 // every whole seq will be terminal but we only care about
@@ -325,7 +331,7 @@ where
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
-    fn _remove_start(&mut self, key: u64) -> bool {
+    fn _remove_start(&mut self, key: (u64, T)) -> bool {
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
             self.starts.remove(idx);
             self.children.remove(&key);
@@ -337,7 +343,7 @@ where
     }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
-    fn _remove(seq: &[T], key: u64, entry: Entry<u64, Node<T>>) -> bool {
+    fn _remove(seq: &[T], key: (u64, T), entry: Entry<(u64, T), Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
                 //println!("{:?}", n);
@@ -409,7 +415,7 @@ where
                 
                 while i > 0 {
                     //println!("KE?YAT {:?}", self.children.get(&key_at_index(i - 1, seq)));
-                    if Self::_remove(seq, key, self.children.entry(key_at_index(i - 1, seq))) {
+                    if Self::_remove(seq, key.clone(), self.children.entry(key_at_index(i - 1, seq))) {
                         //println!("KE?YAT {:?}", self.children.get(&key));
                         self.len -= 1;
                         self.children.remove(&key);
@@ -437,7 +443,7 @@ where
         }
     }
 
-    fn branch_state(&self, seq: &[T]) -> Remove {
+    fn branch_state(&self, seq: &[T]) -> Remove<T> {
         if self.is_empty() {
             return Remove::Empty;
         }
@@ -476,7 +482,7 @@ where
 //     First(u64),
 // }
 
-pub enum Remove {
+pub enum Remove<T> {
     /// A parent node has zero or one child and can be removed.
     Childless,
     /// `Trie` is empty.
@@ -486,13 +492,13 @@ pub enum Remove {
     /// Sequence to remove was not found in the `Trie`
     NoMatch,
     /// Single item in sequence, remove from starts.
-    Starts(u64),
+    Starts((u64, T)),
     /// `Stemish` holds the key to the end node if end node contains children.
     /// The word "car" would be `Stemish` to "cart".
-    Stemish(u64),
+    Stemish((u64, T)),
     /// If sequence contains any terminal nodes, `Terminal` holds the
     /// key to first safe to remove non terminal node.
-    Terminal(usize, u64),
+    Terminal(usize, (u64, T)),
 }
 
 #[derive(Debug, Clone)]
@@ -543,11 +549,14 @@ impl<T: Clone + PartialEq> Found<T> {
     }
 }
 #[derive(Debug, Clone)]
-pub struct TrieIter<'a, T> {
+pub struct TrieIter<'a, T> 
+where
+    T: Eq + Hash,
+{
     trie: &'a Trie<T>,
     current: Option<&'a Node<T>>,
-    starts: &'a [u64],
-    children: Vec<u64>,
+    starts: &'a [(u64, T)],
+    children: Vec<(u64, T)>,
     idx: usize,
     next_idx: usize,
 }
@@ -556,6 +565,7 @@ where
     T: Clone + Eq + Hash + Debug,
 {
     type Item = &'a Node<T>;
+    // TODO lots of alloc ??
     fn next(&mut self) -> Option<Self::Item> {
         //println!("{:?}", self);
         if self.current.is_none() {
@@ -566,7 +576,7 @@ where
             // we know its there
             self.children = self.current.unwrap()
                 .walk(self.trie)
-                .map(|n| n.key)
+                .map(|n| n.key.clone())
                 .collect::<Vec<_>>();
             self.current
         } else if let Some(key) = self.children.get(self.next_idx) {

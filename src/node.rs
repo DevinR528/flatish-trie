@@ -1,13 +1,14 @@
 // use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::fmt::Debug;
+use std::collections::HashMap;
 use crate::{key_at_index, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
-    pub(crate) key: u64,
+    pub(crate) key: (u64, T),
     pub(crate) val: T,
-    pub(crate) children: Vec<u64>,
+    pub(crate) children: Vec<(u64, T)>,
     pub(crate) child_size: usize,
     pub(crate) terminal: bool,
 }
@@ -50,7 +51,7 @@ where
         self.children.len()
     }
 
-    pub(crate) fn remove_child(&mut self, key: &u64) -> bool {
+    pub(crate) fn remove_child(&mut self, key: &(u64, T)) -> bool {
         if let Some(idx) = self.children.iter().position(|c| c == key) {
             self.children.remove(idx);
             self.child_size -= 1;
@@ -61,7 +62,7 @@ where
         }
     }
 
-    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a PreHashedMap<u64, Node<T>>) -> Vec<&'b Node<T>> {
+    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a HashMap<(u64, T), Node<T>>) -> Vec<&'b Node<T>> {
         self.children.iter().map(|key| map.get(key).unwrap()).collect()
     }
     /// Adds next `u64` key to `Node.children` if it can be made from
@@ -77,7 +78,10 @@ where
         }
     }
     /// Depth first iteration of a node and its children.
-    pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> {
+    pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> 
+    where
+    T: Eq + Hash,
+    {
         NodeIter {
             map: &trie.children,
             current: self,
@@ -88,13 +92,16 @@ where
 }
 
 pub(crate) struct NodeIter<'a, T> {
-    map: &'a PreHashedMap<u64, Node<T>>,
+    map: &'a HashMap<(u64, T), Node<T>>,
     current: &'a Node<T>,
     next: Option<&'a Node<T>>,
     // TODO try using VecDeque
-    all_kids: Vec<u64>,
+    all_kids: Vec<(u64, T)>,
 }
-impl<'a, T> Iterator for NodeIter<'a, T> {
+impl<'a, T> Iterator for NodeIter<'a, T> 
+where
+    T: Clone + Eq + Hash,
+{
     type Item = &'a Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
         // return first child
@@ -115,7 +122,7 @@ impl<'a, T> Iterator for NodeIter<'a, T> {
             // next is always Some
             self.current = self.next.unwrap();
             // all kids will be empty for the end case
-            self.all_kids.splice(0..0, self.current.children.iter().rev().copied());
+            self.all_kids.splice(0..0, self.current.children.iter().rev().cloned());
 
             if self.all_kids.is_empty() { return None };
 
