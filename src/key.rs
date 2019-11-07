@@ -7,12 +7,9 @@ use fnv::FnvHasher;
 
 /// Length of sequence minus one
 pub(crate) fn key_from_seq<T: Hash + Clone>(seq: &[T]) -> Vec<T>  {
-    let i = seq.len() - 1;
-
-    seq[..i + 1].to_vec()
+    seq[..seq.len()].to_vec()
 }
 
 pub(crate) fn key_at_index<T: Hash + Clone + std::fmt::Debug>(idx: usize, seq: &[T]) -> Vec<T>  {
-    println!("{:?}", &seq[..idx + 1]);
     seq[..idx + 1].to_vec()
 }

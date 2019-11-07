@@ -126,6 +126,10 @@ where
     /// ```
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
+            if let Some(end) = self.children.get_mut(&key_from_seq(seq)) {
+                end.terminal = true;
+                return;
+            }
             let key = key_at_index(0, seq);
             if !self.starts.contains(&key) { self.starts.push(key) };
             self._insert(seq, Some(first.clone()), 0)
@@ -257,7 +261,7 @@ where
     fn is_terminal_end (&self, seq: &[T]) -> bool {
         let end_key = key_from_seq(seq);
         if let Some(node) = self.children.get(&end_key) {
-            node.child_len() > 0
+            node.child_len() > 0 && node.is_terminal()
         } else {
             panic!("is stem ish failed bug")
         }
@@ -274,8 +278,8 @@ where
                 if i == seq.len() - 1 { return false };
 
                 let key = key_at_index(i, seq);
-                if let Some(n) = self.children.get(&key) {
-                    n.is_terminal()
+                if let Some(node) = self.children.get(&key) {
+                    node.is_terminal() || node.child_size > 1
                 } else {
                     // TODO what to do if node not found
                     // at this point its a bug becasue we have already
@@ -286,16 +290,15 @@ where
     }
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
-    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, Vec<T>)> {
+    #[allow(clippy::block_in_if_condition_stmt)]
+    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<usize> {
         if seq.iter().enumerate()
             .any(|(i, _)| {
                 // every whole seq will be terminal but we only care about
                 // the middle bits.
-                if i == seq.len() - 1 { return false };
-
                 let key = key_at_index(i, seq);
                 if let Some(n) = self.children.get(&key) {
-                    n.is_terminal()
+                    n.is_terminal() && i != seq.len() - 1
                 } else {
                     // TODO what to do if node not found
                     // at this point its a bug becasue we have already
@@ -304,7 +307,6 @@ where
                 }
             })
         {
-            let mut key = key_from_seq(seq);
             seq.iter()
                 .enumerate()
                 .rev()
@@ -312,12 +314,12 @@ where
                 .find(|(i, _)| {
                     let key = key_at_index(*i, seq);
                     if let Some(node) = self.children.get(&key) {
-                        node.is_terminal()
+                        node.is_terminal() || node.child_size > 1
                     } else {
                         false
                     }
                 })
-                .map(|(i, _)| (i, key))
+                .map(|(i, _)| i)
         } else {
             None
         }
@@ -332,7 +334,15 @@ where
     }
     /// Removes from starts vec and removes key, value from children map.
     fn _remove_start(&mut self, key: Vec<T>) -> bool {
+        if let Some(node) = self.children.get_mut(&key) {
+            if node.child_size != 0 { 
+                println!("{:?}", node);
+                node.terminal = false;
+                return true;
+            }
+        }
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
+            println!("IN Starts {:?} {}", self.children.get(&key), idx);
             self.starts.remove(idx);
             self.children.remove(&key);
             self.len -= 1;
@@ -374,8 +384,12 @@ where
     /// ```
     pub fn remove(&mut self, seq: &[T]) -> bool {
         match self.branch_state(seq) {
-            Remove::NoMatch => false,
-            Remove::Empty => false,
+            Remove::NoMatch => {
+                false
+            },
+            Remove::Empty => {
+                false
+            },
             Remove::Starts(key) => {
                 self._remove_start(key)
             },
@@ -383,18 +397,21 @@ where
                 self.clear();
                 true
             },
-            Remove::Terminal(mut idx, mut key) => {
-                if self.children.remove(&key).is_some() {
-                    if let Some(n) = self.children.get_mut(&key_at_index(idx, seq)) {
-                        n.remove_child(&key);
+            Remove::Terminal(mut idx) => {
+                if let Some(n) = self.children.get_mut(&key_at_index(idx, seq)) {
+                    println!("IN TERM {:?} {}", n, idx);
+                    if seq.len() > idx + 1 {
+                        n.remove_child(&key_at_index(idx + 1, seq));
+                        println!("post IN TERM {:?} {}", n, idx);
                     }
-                    self.len -= 1;
                 }
                 idx += 1;
 
                 while idx < seq.len() {
-                    key = key_at_index(idx, seq);
+                    let key = key_at_index(idx, seq);
+                    println!("IN TERM {:?} {}", self.children.get(&key), idx);
                     if self.children.remove(&key).is_some() {
+                        println!("post IN TERM {:?} {}", self.children.get(&key), idx);
                         self.len -= 1;
                     }
                     idx += 1;
@@ -405,7 +422,6 @@ where
             Remove::Stemish(end_key) => {
                 if let Some(node) = self.children.get_mut(&end_key) {
                     node.terminal = false;
-                    // self.len -= 1;
                 }
                 true
             },
@@ -416,7 +432,7 @@ where
                 while i > 0 {
                     //println!("KE?YAT {:?}", self.children.get(&key_at_index(i - 1, seq)));
                     if Self::_remove(seq, key.clone(), self.children.entry(key_at_index(i - 1, seq))) {
-                        //println!("KE?YAT {:?}", self.children.get(&key));
+                        // println!("KE?YAT {:?}", self.children.get(&key));
                         self.len -= 1;
                         self.children.remove(&key);
                         if i == 1 {
@@ -428,9 +444,21 @@ where
                             }
                         };
                     } else {
-                        if self.children.get(&key).unwrap().child_len() == 0 {
-                            self.children.remove(&key);
-                            self.len -= 1;
+                        if let Some(node) = self.children.get(&key) {
+                            // println!("No WAY {:?}", node);
+                            if node.child_len() == 0 {
+                                self.children.remove(&key);
+                                self.children.entry(key_at_index(i - 1, seq))
+                                    .and_modify(|n| {
+                                        // println!("REMOVE CHILD {:?}", n);
+                                        n.remove_child(&key);
+                                        // println!("REMOVE CHILD {:?}", n);
+                                    })
+                                    // TODO Hacky?? we can't insert on a remove! we know all `keys` in `seq` are valid
+                                    // so if `or_insert_with` runs we have a bug
+                                    .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
+                                self.len -= 1;
+                            }
                         }
                         // self.len -= 1;
                         return true
@@ -444,32 +472,51 @@ where
     }
 
     fn branch_state(&self, seq: &[T]) -> Remove<T> {
+        //println!("Rest {:#?}", self);
         if self.is_empty() {
+
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Empty   {:?}", x.iter().collect::<String>());
+
             return Remove::Empty;
         }
-        if seq.len() == 1 {
+        if seq.len() == 1 && self.children.contains_key(&key_from_seq(seq)) {
+
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Starts   {:?}", x.iter().collect::<String>());
+
             return Remove::Starts(key_from_seq(seq));
         }
         if !seq.iter().enumerate()
-            .all(|(i, _)| {
-                let key = key_at_index(i, seq);
-                self.children.contains_key(&key)
-            })
+            .all(|(i, _)| self.children.contains_key(&key_at_index(i, seq)))
         {
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("NoMatch  {:?}", x.iter().collect::<String>());
+            
             Remove::NoMatch
         } else if self.len == seq.len() && !self.contains_terminal(seq){
-            // println!("Rest");
+
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Rest     {:?}", x.iter().collect::<String>());
+
             Remove::Rest
         } else if self.is_terminal_end(seq) {
-            // println!("Stem");
+
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Stem     {:?}", x.iter().collect::<String>());
+
             let end_key = key_from_seq(seq);
             Remove::Stemish(end_key)
+        } else if let Some(i) = self.contains_terminal_with_key(seq) {
+
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Terminal {:?}", x.iter().collect::<String>());
+
+            Remove::Terminal(i)
         } else {
-            // println!("OTHER");
-            if let Some((i, non_term_key)) = self.contains_terminal_with_key(seq) {
-                // println!("seq={:?} idx={} key={}", seq, i, non_term_key);
-                return Remove::Terminal(i, non_term_key);
-            }
+            let x: &[char] = unsafe { &*(seq as *const [T] as *const [char]) };
+            println!("Child    {:?}", x.iter().collect::<String>());
+
             Remove::Childless
         }
     }
@@ -498,7 +545,7 @@ pub enum Remove<T> {
     Stemish(Vec<T>),
     /// If sequence contains any terminal nodes, `Terminal` holds the
     /// key to first safe to remove non terminal node.
-    Terminal(usize, Vec<T>),
+    Terminal(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -711,6 +758,70 @@ mod tests {
         assert!(!trie.contains(&['c', 'a', 'r']))
     }
 
+    #[test]
+    fn problem_words() {
+
+        let text = get_text(1);
+
+        let mut t = Trie::new();
+        t.insert(&"indias".chars().collect::<Vec<_>>());
+        t.insert(&"india".chars().collect::<Vec<_>>());
+        t.insert(&"in".chars().collect::<Vec<_>>());
+        t.insert(&"\"all".chars().collect::<Vec<_>>());
+        t.insert(&"alike".chars().collect::<Vec<_>>());
+        t.insert(&"alchemy.".chars().collect::<Vec<_>>());
+        t.insert(&"and".chars().collect::<Vec<_>>());
+        t.insert(&"ants".chars().collect::<Vec<_>>());
+        t.insert(&"is,".chars().collect::<Vec<_>>());
+        t.insert(&"are".chars().collect::<Vec<_>>());
+        t.insert(&"art".chars().collect::<Vec<_>>());
+
+        t.remove(&"indias".chars().collect::<Vec<_>>());
+        t.remove(&"india".chars().collect::<Vec<_>>());
+        t.remove(&"in".chars().collect::<Vec<_>>());
+        t.remove(&"\"all".chars().collect::<Vec<_>>());
+        t.remove(&"alike".chars().collect::<Vec<_>>());
+        t.remove(&"alchemy.".chars().collect::<Vec<_>>());
+        t.remove(&"and".chars().collect::<Vec<_>>());
+        t.remove(&"ants".chars().collect::<Vec<_>>());
+        t.remove(&"is,".chars().collect::<Vec<_>>());
+        t.remove(&"are".chars().collect::<Vec<_>>());
+        t.remove(&"art".chars().collect::<Vec<_>>());
+        assert!(t.is_empty(), "len: {}", t.len);
+    }
+    #[test]
+    fn similar_sequences() {
+
+        let text = get_text(1);
+
+        let mut t = Trie::new();
+        t.insert(&"a".chars().collect::<Vec<_>>());
+        t.insert(&"aa".chars().collect::<Vec<_>>());
+        t.insert(&"aaa".chars().collect::<Vec<_>>());
+        t.insert(&"ab".chars().collect::<Vec<_>>());
+        t.insert(&"abb".chars().collect::<Vec<_>>());
+        t.insert(&"acc".chars().collect::<Vec<_>>());
+        t.insert(&"ac".chars().collect::<Vec<_>>());
+        t.insert(&"abc".chars().collect::<Vec<_>>());
+        t.insert(&"acb".chars().collect::<Vec<_>>());
+        t.insert(&"abcd".chars().collect::<Vec<_>>());
+        t.insert(&"adcb".chars().collect::<Vec<_>>());
+
+        t.remove(&"aa".chars().collect::<Vec<_>>());
+        t.remove(&"a".chars().collect::<Vec<_>>());
+        t.remove(&"aaa".chars().collect::<Vec<_>>());
+        t.remove(&"adcb".chars().collect::<Vec<_>>());
+        t.remove(&"abb".chars().collect::<Vec<_>>());
+        t.remove(&"ac".chars().collect::<Vec<_>>());
+        t.remove(&"acc".chars().collect::<Vec<_>>());
+        t.remove(&"acb".chars().collect::<Vec<_>>());
+        t.remove(&"abc".chars().collect::<Vec<_>>());
+        t.remove(&"abcd".chars().collect::<Vec<_>>());
+        t.remove(&"ab".chars().collect::<Vec<_>>());
+        //println!("{:#?}", t);
+        assert!(t.is_empty());
+    }
+
     use std::collections::{HashSet, hash_map::RandomState};
     use std::iter::FromIterator;
 
@@ -729,21 +840,19 @@ mod tests {
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let mut srtd = unique.iter().collect::<Vec<_>>();
         println!("COUNT {}", unique.iter().flat_map(|w| w.chars()).count());
-        srtd.sort();
+        //srtd.sort();
 
         let mut trie = Trie::new();
-        for w in srtd.iter() {
+        for w in text.iter() {
             trie.insert(&w.chars().collect::<Vec<_>>());
         }
 
-        for (i, word) in srtd.iter().enumerate() {
-            assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "does not contain {}", word);
+        println!("{:?}", trie.search(&['a', 'l', 'c']));
+
+        for (i, word) in text.iter().enumerate() {
+            // assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "does not contain {}", word);
             trie.remove(&word.chars().collect::<Vec<_>>());
         }
-
-        trie.children.values().for_each(|n| {
-            println!("{} {}", n.val, n.child_len())
-        });
         println!("{:#?}", trie);
         assert!(trie.is_empty());
 
