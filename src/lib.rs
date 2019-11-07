@@ -38,8 +38,8 @@ pub struct Trie<T>
 where
     T: Eq + Hash,
 {
-    starts: Vec<(u64, T)>,
-    children: HashMap<(u64, T), Node<T>>,
+    starts: Vec<Vec<T>>,
+    children: HashMap<Vec<T>, Node<T>>,
     /// number of unique items T inserted into the trie.
     len: usize,
 }
@@ -173,7 +173,7 @@ where
     // }
 
     fn _search<'n>(
-        map: &HashMap<(u64, T), Node<T>>,
+        map: &HashMap<Vec<T>, Node<T>>,
         node: &'n Node<T>,
         seq_key: &[T],
         idx: usize,
@@ -286,7 +286,7 @@ where
     }
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
-    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, (u64, T))> {
+    fn contains_terminal_with_key(&self, seq: &[T]) -> Option<(usize, Vec<T>)> {
         if seq.iter().enumerate()
             .any(|(i, _)| {
                 // every whole seq will be terminal but we only care about
@@ -331,7 +331,7 @@ where
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
-    fn _remove_start(&mut self, key: (u64, T)) -> bool {
+    fn _remove_start(&mut self, key: Vec<T>) -> bool {
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
             self.starts.remove(idx);
             self.children.remove(&key);
@@ -343,7 +343,7 @@ where
     }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
-    fn _remove(seq: &[T], key: (u64, T), entry: Entry<(u64, T), Node<T>>) -> bool {
+    fn _remove(seq: &[T], key: Vec<T>, entry: Entry<Vec<T>, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
                 //println!("{:?}", n);
@@ -492,13 +492,13 @@ pub enum Remove<T> {
     /// Sequence to remove was not found in the `Trie`
     NoMatch,
     /// Single item in sequence, remove from starts.
-    Starts((u64, T)),
+    Starts(Vec<T>),
     /// `Stemish` holds the key to the end node if end node contains children.
     /// The word "car" would be `Stemish` to "cart".
-    Stemish((u64, T)),
+    Stemish(Vec<T>),
     /// If sequence contains any terminal nodes, `Terminal` holds the
     /// key to first safe to remove non terminal node.
-    Terminal(usize, (u64, T)),
+    Terminal(usize, Vec<T>),
 }
 
 #[derive(Debug, Clone)]
@@ -555,8 +555,8 @@ where
 {
     trie: &'a Trie<T>,
     current: Option<&'a Node<T>>,
-    starts: &'a [(u64, T)],
-    children: Vec<(u64, T)>,
+    starts: &'a [Vec<T>],
+    children: Vec<Vec<T>>,
     idx: usize,
     next_idx: usize,
 }
@@ -571,7 +571,7 @@ where
         if self.current.is_none() {
             // this bails us out of the iteration
             let key = self.starts.get(self.idx)?;
-            self.current = Some(self.trie.children.get(&key)?);
+            self.current = Some(self.trie.children.get(key)?);
             self.idx += 1;
             // we know its there
             self.children = self.current.unwrap()
@@ -580,7 +580,7 @@ where
                 .collect::<Vec<_>>();
             self.current
         } else if let Some(key) = self.children.get(self.next_idx) {
-            self.current = self.trie.children.get(&key);
+            self.current = self.trie.children.get(key);
             self.next_idx += 1;
 
             if self.next_idx >= self.children.len() {
@@ -592,7 +592,7 @@ where
             }
         } else {
             let key = self.starts.get(self.idx)?;
-            self.current = Some(self.trie.children.get(&key)?);
+            self.current = Some(self.trie.children.get(key)?);
             self.idx += 1;
             self.current
         }
@@ -744,7 +744,7 @@ mod tests {
         trie.children.values().for_each(|n| {
             println!("{} {}", n.val, n.child_len())
         });
-        println!("{}", trie.len);
+        println!("{:#?}", trie);
         assert!(trie.is_empty());
 
         // // test 1984

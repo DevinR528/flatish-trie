@@ -6,9 +6,9 @@ use crate::{key_at_index, Trie, PreHashedMap};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
-    pub(crate) key: (u64, T),
+    pub(crate) key: Vec<T>,
     pub(crate) val: T,
-    pub(crate) children: Vec<(u64, T)>,
+    pub(crate) children: Vec<Vec<T>>,
     pub(crate) child_size: usize,
     pub(crate) terminal: bool,
 }
@@ -51,7 +51,7 @@ where
         self.children.len()
     }
 
-    pub(crate) fn remove_child(&mut self, key: &(u64, T)) -> bool {
+    pub(crate) fn remove_child(&mut self, key: &Vec<T>) -> bool {
         if let Some(idx) = self.children.iter().position(|c| c == key) {
             self.children.remove(idx);
             self.child_size -= 1;
@@ -62,7 +62,7 @@ where
         }
     }
 
-    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a HashMap<(u64, T), Node<T>>) -> Vec<&'b Node<T>> {
+    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a HashMap<Vec<T>, Node<T>>) -> Vec<&'b Node<T>> {
         self.children.iter().map(|key| map.get(key).unwrap()).collect()
     }
     /// Adds next `u64` key to `Node.children` if it can be made from
@@ -92,11 +92,11 @@ where
 }
 
 pub(crate) struct NodeIter<'a, T> {
-    map: &'a HashMap<(u64, T), Node<T>>,
+    map: &'a HashMap<Vec<T>, Node<T>>,
     current: &'a Node<T>,
     next: Option<&'a Node<T>>,
     // TODO try using VecDeque
-    all_kids: Vec<(u64, T)>,
+    all_kids: Vec<Vec<T>>,
 }
 impl<'a, T> Iterator for NodeIter<'a, T> 
 where
