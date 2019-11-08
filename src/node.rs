@@ -51,8 +51,8 @@ where
         self.children.len()
     }
 
-    pub(crate) fn remove_child(&mut self, key: &Vec<T>) -> bool {
-        if let Some(idx) = self.children.iter().position(|c| c == key) {
+    pub(crate) fn remove_child(&mut self, key: &[T]) -> bool {
+        if let Some(idx) = self.children.iter().position(|c| c.as_slice() == key) {
             self.children.remove(idx);
             self.child_size -= 1;
             // if self.child_len() > 0 { self.child_size -= 1 };

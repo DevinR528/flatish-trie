@@ -336,13 +336,13 @@ where
     fn _remove_start(&mut self, key: Vec<T>) -> bool {
         if let Some(node) = self.children.get_mut(&key) {
             if node.child_size != 0 { 
-                println!("{:?}", node);
+                //println!("{:?}", node);
                 node.terminal = false;
                 return true;
             }
         }
         if let Some(idx) = self.starts.iter().position(|it| it == &key) {
-            println!("IN Starts {:?} {}", self.children.get(&key), idx);
+            //println!("IN Starts {:?} {}", self.children.get(&key), idx);
             self.starts.remove(idx);
             self.children.remove(&key);
             self.len -= 1;
@@ -363,6 +363,95 @@ where
             // so if `or_insert_with` runs we have a bug
             .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
         node.child_len() == 0
+    }
+
+    pub fn remove2(&mut self, seq: &[T]) -> bool {
+        match self.branch_state(seq) {
+            Remove::NoMatch => {
+                false
+            },
+            Remove::Empty => {
+                false
+            },
+            Remove::Starts(key) => {
+                self._remove_start(key)
+            },
+            Remove::Rest => {
+                self.clear();
+                true
+            },
+            Remove::Terminal(mut idx) => {
+                if let Some(n) = self.children.get_mut(&key_at_index(idx, seq)) {
+                    //println!("IN TERM {:?} {}", n, idx);
+                    if seq.len() > idx + 1 {
+                        n.remove_child(&key_at_index(idx + 1, seq));
+                        //println!("post IN TERM {:?} {}", n, idx);
+                    }
+                }
+                idx += 1;
+
+                while idx < seq.len() {
+                    let key = key_at_index(idx, seq);
+                    //println!("IN TERM {:?} {}", self.children.get(&key), idx);
+                    if self.children.remove(&key).is_some() {
+                        //println!("post IN TERM {:?} {}", self.children.get(&key), idx);
+                        self.len -= 1;
+                    }
+                    idx += 1;
+                }
+                
+                true
+            },
+            Remove::Stemish(end_key) => {
+                if let Some(node) = self.children.get_mut(&end_key) {
+                    node.terminal = false;
+                }
+                true
+            },
+            Remove::Childless => {
+                let mut i = seq.len() - 1;
+                let mut key = key_at_index(i, seq);
+                
+                while i > 0 {
+                    //println!("KE?YAT {:?}", self.children.get(&key_at_index(i - 1, seq)));
+                    if Self::_remove(seq, key.clone(), self.children.entry(key_at_index(i - 1, seq))) {
+                        // println!("KE?YAT {:?}", self.children.get(&key));
+                        self.len -= 1;
+                        self.children.remove(&key);
+                        if i == 1 {
+                            let first_key = key_at_index(0, seq);
+                            let node = self.children.get(&first_key).expect("key has been checked for match previously bug");
+                            if !node.is_terminal() {
+                                self._remove_start(first_key);
+                                return true;
+                            }
+                        };
+                    } else {
+                        if let Some(node) = self.children.get(&key) {
+                            // println!("No WAY {:?}", node);
+                            if node.child_len() == 0 {
+                                self.children.remove(&key);
+                                self.children.entry(key_at_index(i - 1, seq))
+                                    .and_modify(|n| {
+                                        // println!("REMOVE CHILD {:?}", n);
+                                        n.remove_child(&key);
+                                        // println!("REMOVE CHILD {:?}", n);
+                                    })
+                                    // TODO Hacky?? we can't insert on a remove! we know all `keys` in `seq` are valid
+                                    // so if `or_insert_with` runs we have a bug
+                                    .or_insert_with(|| panic!("tried to remove a non existent child {:?}", seq));
+                                self.len -= 1;
+                            }
+                        }
+                        // self.len -= 1;
+                        return true
+                    }
+                    i -= 1;
+                    key = key_at_index(i, seq);
+                }
+                true
+            },
+        }
     }
     /// Returns true if the sequence has been removed.
     ///
@@ -399,19 +488,19 @@ where
             },
             Remove::Terminal(mut idx) => {
                 if let Some(n) = self.children.get_mut(&key_at_index(idx, seq)) {
-                    println!("IN TERM {:?} {}", n, idx);
+                    //println!("IN TERM {:?} {}", n, idx);
                     if seq.len() > idx + 1 {
                         n.remove_child(&key_at_index(idx + 1, seq));
-                        println!("post IN TERM {:?} {}", n, idx);
+                        //println!("post IN TERM {:?} {}", n, idx);
                     }
                 }
                 idx += 1;
 
                 while idx < seq.len() {
                     let key = key_at_index(idx, seq);
-                    println!("IN TERM {:?} {}", self.children.get(&key), idx);
+                    //println!("IN TERM {:?} {}", self.children.get(&key), idx);
                     if self.children.remove(&key).is_some() {
-                        println!("post IN TERM {:?} {}", self.children.get(&key), idx);
+                        //println!("post IN TERM {:?} {}", self.children.get(&key), idx);
                         self.len -= 1;
                     }
                     idx += 1;
@@ -838,18 +927,18 @@ mod tests {
         let text = get_text(1);
 
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
-        let mut srtd = unique.iter().collect::<Vec<_>>();
+        let arr = unique.iter().collect::<Vec<_>>();
         println!("COUNT {}", unique.iter().flat_map(|w| w.chars()).count());
         //srtd.sort();
 
         let mut trie = Trie::new();
-        for w in text.iter() {
+        for w in arr.iter() {
             trie.insert(&w.chars().collect::<Vec<_>>());
         }
 
         println!("{:?}", trie.search(&['a', 'l', 'c']));
 
-        for (i, word) in text.iter().enumerate() {
+        for (i, word) in arr.iter().enumerate() {
             // assert!(trie.contains(&word.chars().collect::<Vec<_>>()), "does not contain {}", word);
             trie.remove(&word.chars().collect::<Vec<_>>());
         }
