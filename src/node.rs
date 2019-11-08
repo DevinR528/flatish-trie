@@ -1,8 +1,8 @@
 // use std::collections::{HashMap, VecDeque};
-use std::hash::Hash;
-use std::fmt::Debug;
+use crate::{key_at_index, PreHashedMap, Trie};
 use std::collections::HashMap;
-use crate::{key_at_index, Trie, PreHashedMap};
+use std::fmt::Debug;
+use std::hash::Hash;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Node<T> {
@@ -19,7 +19,7 @@ impl<T: PartialEq> PartialEq for Node<T> {
     }
 }
 
-impl<T> Node<T> 
+impl<T> Node<T>
 where
     T: Eq + Hash + Clone + Debug,
 {
@@ -62,11 +62,17 @@ where
         }
     }
 
-    pub(crate) fn children<'b, 'a: 'b>(&'a self, map: &'a HashMap<Vec<T>, Node<T>>) -> Vec<&'b Node<T>> {
-        self.children.iter().map(|key| map.get(key).unwrap()).collect()
+    pub(crate) fn children<'b, 'a: 'b>(
+        &'a self,
+        map: &'a HashMap<Vec<T>, Node<T>>,
+    ) -> Vec<&'b Node<T>> {
+        self.children
+            .iter()
+            .map(|key| map.get(key).unwrap())
+            .collect()
     }
     /// Adds next `u64` key to `Node.children` if it can be made from
-    /// `seq[idx + 1]`. 
+    /// `seq[idx + 1]`.
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if let Some(_) = seq.get(i) {
@@ -78,9 +84,9 @@ where
         }
     }
     /// Depth first iteration of a node and its children.
-    pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T> 
+    pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T>
     where
-    T: Eq + Hash,
+        T: Eq + Hash,
     {
         NodeIter {
             map: &trie.children,
@@ -98,7 +104,7 @@ pub(crate) struct NodeIter<'a, T> {
     // TODO try using VecDeque
     all_kids: Vec<Vec<T>>,
 }
-impl<'a, T> Iterator for NodeIter<'a, T> 
+impl<'a, T> Iterator for NodeIter<'a, T>
 where
     T: Clone + Eq + Hash,
 {
@@ -116,15 +122,18 @@ where
             } else {
                 None
             }
-            
+
         // iterate depth first through children
         } else {
             // next is always Some
             self.current = self.next.unwrap();
             // all kids will be empty for the end case
-            self.all_kids.splice(0..0, self.current.children.iter().rev().cloned());
+            self.all_kids
+                .splice(0..0, self.current.children.iter().rev().cloned());
 
-            if self.all_kids.is_empty() { return None };
+            if self.all_kids.is_empty() {
+                return None;
+            };
 
             let key = self.all_kids.remove(0);
             self.next = self.map.get(&key);

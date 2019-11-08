@@ -11,11 +11,8 @@ fn get_text() -> Vec<String> {
         .unwrap()
         .read_to_string(&mut contents)
         .unwrap();
-        
-    contents
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect()
+
+    contents.split_whitespace().map(|s| s.to_string()).collect()
 }
 
 fn make_trie(words: &[String]) -> Trie<char> {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::default::Default;
-use std::hash::{Hasher, BuildHasherDefault};
+use std::hash::{BuildHasherDefault, Hasher};
 
 //use crate::noop_hash::PreHashedMap;
 
@@ -8,7 +8,6 @@ use std::hash::{Hasher, BuildHasherDefault};
 pub struct NoopHasher(u64);
 
 impl Default for NoopHasher {
-
     #[inline]
     fn default() -> NoopHasher {
         // "empty" Hasher
@@ -39,7 +38,10 @@ mod test {
 
     // this is the fn that https://github.com/rust-lang/hashbrown/blob/master/src/map.rs#L200 uses
     // which is the guts that std lib uses so this should test what happens in the hashmap
-    fn make_hash<K: Hash + std::fmt::Debug + ?Sized>(hash_builder: &impl BuildHasher, val: &K) -> u64 {
+    fn make_hash<K: Hash + std::fmt::Debug + ?Sized>(
+        hash_builder: &impl BuildHasher,
+        val: &K,
+    ) -> u64 {
         let mut state = hash_builder.build_hasher();
         val.hash(&mut state);
         state.finish()
