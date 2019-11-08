@@ -67,9 +67,22 @@ where
             len: 0,
         }
     }
-
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// Returns `true` if `seq_key` is found.
+    /// Note the last item in seq_key must be a terminal node.
+    /// TODO is this a good idea (terminal node)
+    #[inline]
+    pub fn contains(&self, seq_key: &[T]) -> bool {
+        let key = key_from_seq(seq_key);
+        let mut term = false;
+        if let Some(n) = self.children.get(&key) {
+            term = n.is_terminal();
+        }
+        self.children.contains_key(&key) && term
     }
 
     /// TODO make this insert in reverse check if optimizes.
@@ -128,6 +141,7 @@ where
     ///     &[ ['c', 'a', 't'], ['c', 'o', 'w'] ]
     /// );
     /// ```
+    #[inline]
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             if let Some(end) = self.children.get_mut(&key_from_seq(seq)) {
@@ -211,18 +225,6 @@ where
         }
     }
 
-    /// Returns `true` if `seq_key` is found.
-    /// Note the last item in seq_key must be a terminal node.
-    /// TODO is this a good idea (terminal node)
-    pub fn contains(&self, seq_key: &[T]) -> bool {
-        let key = key_from_seq(seq_key);
-        let mut term = false;
-        if let Some(n) = self.children.get(&key) {
-            term = n.is_terminal();
-        }
-        self.children.contains_key(&key) && term
-    }
-
     /// Returns all of the found sequences, walking
     /// each branch depth first.
     ///
@@ -241,6 +243,7 @@ where
     ///     &[ ['c', 'a', 't'], ['c', 'o', 'w'] ]
     /// );
     /// ```
+    #[inline]
     pub fn search(&self, seq_key: &[T]) -> Found<T> {
         let key = key_from_seq(seq_key);
 
@@ -264,6 +267,7 @@ where
     }
 
     /// Returns `true` if terminal node has children.
+    #[inline]
     fn is_terminal_end(&self, seq: &[T]) -> bool {
         let end_key = key_from_seq(seq);
         if let Some(node) = self.children.get(&end_key) {
@@ -272,9 +276,7 @@ where
             panic!("is stem ish failed bug")
         }
     }
-
-    /// Returns true if seq contains a terminal node anywhere
-    /// except the last node.
+    #[inline]
     fn contains_terminal(&self, seq: &[T]) -> bool {
         seq.iter().enumerate().any(|(i, _)| {
             // every whole seq will be terminal but we only care about
@@ -297,6 +299,7 @@ where
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
     #[allow(clippy::block_in_if_condition_stmt)]
+    #[inline]
     fn contains_terminal_with_key(&self, seq: &[T]) -> Option<usize> {
         if seq.iter().enumerate().any(|(i, _)| {
             // every whole seq will be terminal but we only care about
@@ -331,12 +334,14 @@ where
 
     /// Clears the `Trie`.
     /// Note this leaves the previously allocated capacity.
+    #[inline]
     pub fn clear(&mut self) {
         self.len = 0;
         self.children.clear();
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
+    #[inline]
     fn _remove_start(&mut self, key: Vec<T>) -> bool {
         if let Some(node) = self.children.get_mut(&key) {
             if node.child_size != 0 {
@@ -357,6 +362,7 @@ where
     }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
+    #[inline]
     fn _remove(seq: &[T], key: Vec<T>, entry: Entry<Vec<T>, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
@@ -478,7 +484,7 @@ where
             }
         }
     }
-
+    #[inline]
     fn branch_state(&self, seq: &[T]) -> Remove<T> {
         //println!("Rest {:#?}", self);
         if self.is_empty() {
@@ -553,6 +559,7 @@ pub struct Found<T> {
     collected: Vec<Vec<T>>,
 }
 impl<T: Clone + PartialEq> Found<T> {
+    #[inline]
     fn new() -> Self {
         Self {
             roll_back: vec![],
@@ -567,26 +574,26 @@ impl<T: Clone + PartialEq> Found<T> {
             .map(|seq| seq.as_slice())
             .collect::<Vec<_>>()
     }
-
+    #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, i: I) {
         self.temp.extend(i)
     }
-
+    #[inline]
     fn push_val(&mut self, t: T) {
         self.temp.push(t);
     }
-
+    #[inline]
     fn branch_end_continue(&mut self) {
         self.collected.push(self.temp.clone());
     }
-
+    #[inline]
     fn branch_split(&mut self, key: &T) {
         if let Some(idx) = self.temp.iter().position(|item| key == item) {
             let (start, _end) = self.temp.split_at(idx + 1);
             self.temp = start.to_vec();
         }
     }
-
+    #[inline]
     fn branch_end(&mut self) {
         self.collected.push(self.temp.clone());
         // remove last element
@@ -818,7 +825,7 @@ mod tests {
     #[test]
     fn test_rising_sun() {
         let text = get_text(1);
-        
+
         let unique: HashSet<_, RandomState> = HashSet::from_iter(text.iter());
         let arr = unique.iter().collect::<Vec<_>>();
 

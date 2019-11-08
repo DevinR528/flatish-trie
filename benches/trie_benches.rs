@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ecs_trie::Trie;
+// use radix_trie::Trie;
 
 fn get_text() -> Vec<String> {
     use std::fs::File;
@@ -33,9 +34,9 @@ fn trie_get(b: &mut Criterion) {
     let trie = make_trie(&words);
     b.bench_function("trie get", |b| {
         b.iter(|| {
-            words
-                .iter()
-                .map(|w| trie.search(&w.chars().collect::<Vec<_>>()))
+            for w in words.iter() {
+                trie.search(&w.chars().collect::<Vec<_>>());
+            }
         })
     });
 }

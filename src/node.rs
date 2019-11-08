@@ -34,23 +34,23 @@ where
             terminal,
         }
     }
-
+    #[inline]
     pub(crate) fn as_value(&self) -> &T {
         &self.val
     }
-
+    #[inline]
     pub(crate) fn to_value(&self) -> T {
         self.val.clone()
     }
-
+    #[inline]
     pub(crate) fn is_terminal(&self) -> bool {
         self.terminal
     }
-
+    #[inline]
     pub(crate) fn child_len(&self) -> usize {
         self.children.len()
     }
-
+    #[inline]
     pub(crate) fn remove_child(&mut self, key: &[T]) -> bool {
         if let Some(idx) = self.children.iter().position(|c| c.as_slice() == key) {
             self.children.remove(idx);
@@ -61,7 +61,7 @@ where
             false
         }
     }
-
+    #[inline]
     pub(crate) fn children<'b, 'a: 'b>(
         &'a self,
         map: &'a HashMap<Vec<T>, Node<T>>,
@@ -73,9 +73,10 @@ where
     }
     /// Adds next `u64` key to `Node.children` if it can be made from
     /// `seq[idx + 1]`.
+    #[inline]
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
-        if let Some(_) = seq.get(i) {
+        if seq.get(i).is_some() {
             let key = key_at_index(i, seq);
             if !self.children.contains(&key) {
                 self.child_size += 1;

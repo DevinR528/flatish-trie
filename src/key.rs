@@ -5,10 +5,12 @@ use fasthash::{CityHasher, FarmHasher, Lookup3Hasher, MetroHasher, Murmur3Hasher
 use fnv::FnvHasher;
 
 /// Length of sequence minus one
+#[inline]
 pub(crate) fn key_from_seq<T: Hash + Clone>(seq: &[T]) -> Vec<T> {
     seq[..seq.len()].to_vec()
 }
 
+#[inline]
 pub(crate) fn key_at_index<T: Hash + Clone + std::fmt::Debug>(idx: usize, seq: &[T]) -> Vec<T> {
-    seq[..idx + 1].to_vec()
+    seq[..=idx].to_vec()
 }
