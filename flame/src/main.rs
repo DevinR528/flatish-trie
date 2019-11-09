@@ -3,9 +3,12 @@ use std::fs::File;
 use std::io::Read;
 use std::iter::FromIterator;
 
+// extern crate flame;
+// #[macro_use] extern crate flamer;
+
 use ecs_trie::Trie;
 
-const DATA: &[&str] = &["data/1984.txt", "data/sun-rising.txt", "data/words.txt"];
+const DATA: &[&str] = &["../data/1984.txt", "../data/sun-rising.txt", "data/words.txt"];
 
 fn get_text(i: usize) -> Vec<String> {
     let mut contents = String::new();
@@ -18,15 +21,16 @@ fn get_text(i: usize) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .collect()
 }
-
+// #[flame]
 fn make_trie(words: &[String]) -> Trie<char> {
     let mut trie = Trie::new();
     for w in words {
         trie.insert(&w.chars().collect::<Vec<_>>());
     }
+    
     trie
 }
-
+// #[flame]
 fn trie_insert() {
     let words = get_text(1);
     make_trie(&words);
@@ -42,16 +46,22 @@ fn trie_get() {
 }
 
 fn trie_insert_remove() {
-    let words = get_text(1);
+    
 
-    let mut trie = make_trie(&words);
-    for w in &words {
-        trie.remove(&w.chars().collect::<Vec<_>>());
-    }
+    
 }
 
 fn main() {
-    trie_insert();
+    // trie_insert();
     // trie_get();
-    // trie_insert_remove();
+
+    for _ in 0..1000 {
+        let words = get_text(0);
+        let mut trie = make_trie(&words);
+        // for w in &words {
+        //     trie.remove(&w.chars().collect::<Vec<_>>());
+        // }
+    }
+
+    //::flame::dump_html(File::create("trie_insert_remove.html").unwrap()).unwrap();
 }

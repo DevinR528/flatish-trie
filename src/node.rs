@@ -1,5 +1,5 @@
 // use std::collections::{HashMap, VecDeque};
-use crate::{key_at_index, PreHashedMap, Trie};
+use crate::{key_at_index, Trie,};// PreHashedMap};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -23,6 +23,7 @@ impl<T> Node<T>
 where
     T: Eq + Hash + Clone + Debug,
 {
+    // #[flame]
     pub(crate) fn new(val: T, seq: &[T], idx: usize, terminal: bool) -> Node<T> {
         let key = key_at_index(idx, seq);
         let children = Vec::new();
@@ -34,23 +35,28 @@ where
             terminal,
         }
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn as_value(&self) -> &T {
         &self.val
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn to_value(&self) -> T {
         self.val.clone()
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn is_terminal(&self) -> bool {
         self.terminal
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn child_len(&self) -> usize {
         self.children.len()
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn remove_child(&mut self, key: &[T]) -> bool {
         if let Some(idx) = self.children.iter().position(|c| c.as_slice() == key) {
             self.children.remove(idx);
@@ -61,7 +67,8 @@ where
             false
         }
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn children<'b, 'a: 'b>(
         &'a self,
         map: &'a HashMap<Vec<T>, Node<T>>,
@@ -73,7 +80,8 @@ where
     }
     /// Adds next `u64` key to `Node.children` if it can be made from
     /// `seq[idx + 1]`.
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub(crate) fn update_children(&mut self, seq: &[T], idx: usize) {
         let i = idx + 1;
         if seq.get(i).is_some() {
@@ -85,6 +93,7 @@ where
         }
     }
     /// Depth first iteration of a node and its children.
+    // #[flame]
     pub(crate) fn walk<'a>(&'a self, trie: &'a Trie<T>) -> NodeIter<'a, T>
     where
         T: Eq + Hash,
@@ -110,6 +119,7 @@ where
     T: Clone + Eq + Hash,
 {
     type Item = &'a Node<T>;
+    // #[flame]
     fn next(&mut self) -> Option<Self::Item> {
         // return first child
         if self.next.is_none() {

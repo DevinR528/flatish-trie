@@ -33,6 +33,9 @@ use node::Node;
 mod noop_hash;
 pub use noop_hash::PreHashedMap;
 
+// extern crate flame;
+// #[macro_use] extern crate flamer;
+
 #[derive(Debug, Clone)]
 pub struct Trie<T>
 where
@@ -60,6 +63,7 @@ impl<T> Trie<T>
 where
     T: Eq + Hash + Clone + Debug,
 {
+    // #[flame]
     pub fn new() -> Self {
         Trie {
             children: HashMap::default(),
@@ -67,7 +71,13 @@ where
             len: 0,
         }
     }
-    #[inline]
+
+    // #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    // #[flame]
+    // #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -75,7 +85,8 @@ where
     /// Returns `true` if `seq_key` is found.
     /// Note the last item in seq_key must be a terminal node.
     /// TODO is this a good idea (terminal node)
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub fn contains(&self, seq_key: &[T]) -> bool {
         let key = key_from_seq(seq_key);
         let mut term = false;
@@ -86,6 +97,7 @@ where
     }
 
     /// TODO make this insert in reverse check if optimizes.
+    // #[flame]
     fn _insert(&mut self, seq: &[T], val: Option<T>, mut idx: usize) {
         if let Some(val) = val {
             let key = key_at_index(idx, seq);
@@ -141,7 +153,8 @@ where
     ///     &[ ['c', 'a', 't'], ['c', 'o', 'w'] ]
     /// );
     /// ```
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub fn insert(&mut self, seq: &[T]) {
         if let Some(first) = seq.first() {
             if let Some(end) = self.children.get_mut(&key_from_seq(seq)) {
@@ -195,7 +208,7 @@ where
     //         self._insert2(seq, end.clone(), seq.len() - 1, None)
     //     }
     // }
-
+    // #[flame]
     fn _search<'n>(
         map: &HashMap<Vec<T>, Node<T>>,
         node: &'n Node<T>,
@@ -243,7 +256,8 @@ where
     ///     &[ ['c', 'a', 't'], ['c', 'o', 'w'] ]
     /// );
     /// ```
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub fn search(&self, seq_key: &[T]) -> Found<T> {
         let key = key_from_seq(seq_key);
 
@@ -267,7 +281,8 @@ where
     }
 
     /// Returns `true` if terminal node has children.
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn is_terminal_end(&self, seq: &[T]) -> bool {
         let end_key = key_from_seq(seq);
         if let Some(node) = self.children.get(&end_key) {
@@ -276,7 +291,8 @@ where
             panic!("is stem ish failed bug")
         }
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn contains_terminal(&self, seq: &[T]) -> bool {
         seq.iter().enumerate().any(|(i, _)| {
             // every whole seq will be terminal but we only care about
@@ -299,7 +315,8 @@ where
 
     /// Returns index in seq and key to first safe non terminal node anywhere.
     #[allow(clippy::block_in_if_condition_stmt)]
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn contains_terminal_with_key(&self, seq: &[T]) -> Option<usize> {
         if seq.iter().enumerate().any(|(i, _)| {
             // every whole seq will be terminal but we only care about
@@ -334,14 +351,16 @@ where
 
     /// Clears the `Trie`.
     /// Note this leaves the previously allocated capacity.
-    #[inline]
+    // #[flame]
+    // #[inline]
     pub fn clear(&mut self) {
         self.len = 0;
         self.children.clear();
         self.starts.clear();
     }
     /// Removes from starts vec and removes key, value from children map.
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn _remove_start(&mut self, key: Vec<T>) -> bool {
         if let Some(node) = self.children.get_mut(&key) {
             if node.child_size != 0 {
@@ -362,7 +381,8 @@ where
     }
     /// `key` is child's key `entry` is child's parent node.
     /// True when node has no children after _remove is called.
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn _remove(seq: &[T], key: Vec<T>, entry: Entry<Vec<T>, Node<T>>) -> bool {
         let node = entry
             .and_modify(|n| {
@@ -392,6 +412,7 @@ where
     ///     &[ ['c', 'o', 'w'] ]
     /// );
     /// ```
+    // #[flame]
     pub fn remove(&mut self, seq: &[T]) -> bool {
         match self.branch_state(seq) {
             Remove::NoMatch => false,
@@ -484,7 +505,8 @@ where
             }
         }
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn branch_state(&self, seq: &[T]) -> Remove<T> {
         //println!("Rest {:#?}", self);
         if self.is_empty() {
@@ -559,7 +581,7 @@ pub struct Found<T> {
     collected: Vec<Vec<T>>,
 }
 impl<T: Clone + PartialEq> Found<T> {
-    #[inline]
+    // #[inline]
     fn new() -> Self {
         Self {
             roll_back: vec![],
@@ -567,33 +589,38 @@ impl<T: Clone + PartialEq> Found<T> {
             collected: vec![],
         }
     }
-
+    // #[flame]
     pub fn as_collected(&self) -> Vec<&[T]> {
         self.collected
             .iter()
             .map(|seq| seq.as_slice())
             .collect::<Vec<_>>()
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn extend<I: IntoIterator<Item = T>>(&mut self, i: I) {
         self.temp.extend(i)
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn push_val(&mut self, t: T) {
         self.temp.push(t);
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn branch_end_continue(&mut self) {
         self.collected.push(self.temp.clone());
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn branch_split(&mut self, key: &T) {
         if let Some(idx) = self.temp.iter().position(|item| key == item) {
             let (start, _end) = self.temp.split_at(idx + 1);
             self.temp = start.to_vec();
         }
     }
-    #[inline]
+    // #[flame]
+    // #[inline]
     fn branch_end(&mut self) {
         self.collected.push(self.temp.clone());
         // remove last element
@@ -618,6 +645,7 @@ where
 {
     type Item = &'a Node<T>;
     // TODO lots of alloc ??
+    // #[flame]
     fn next(&mut self) -> Option<Self::Item> {
         //println!("{:?}", self);
         if self.current.is_none() {
